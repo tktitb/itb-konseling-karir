@@ -8,14 +8,15 @@ export default function GlassCard({
   onClick = null
 }) {
   const variantStyles = {
-    default: "liquid-glass",
-    gold: "liquid-glass-gold",
-    dark: "liquid-glass-dark text-white",
-    subtle: "liquid-glass-subtle"
+    default: "liquid-neumorph-card",
+    gold: "liquid-neumorph-card border-amber-500/30",
+    dark: "liquid-neumorph-card text-white",
+    subtle: "liquid-glass-subtle",
+    inset: "liquid-neumorph-inset"
   }
 
   const hoverStyle = hover
-    ? "transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-glass-lg cursor-pointer"
+    ? "transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-2xl cursor-pointer"
     : ""
 
   return (

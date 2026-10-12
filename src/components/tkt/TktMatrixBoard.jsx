@@ -10,6 +10,7 @@ import {
   UserCheck,
   AlertCircle
 } from "lucide-react"
+import { getDefaultWaTemplateKey } from "../../services/tktService"
 
 export default function TktMatrixBoard({
   participants = [],
@@ -129,10 +130,7 @@ export default function TktMatrixBoard({
                     return (
                       <div key={sesi} className="flex flex-col gap-2">
                         {occupants.map((occ) => {
-                          const waTemplate =
-                            occ.status_peserta === "HADIR"
-                              ? "wa_template_minta_feedback"
-                              : "wa_template_konfirmasi_sesi"
+                          const waTemplate = getDefaultWaTemplateKey(occ.status_peserta)
                           const waLink = getWaLink(waTemplate, occ)
 
                           return (

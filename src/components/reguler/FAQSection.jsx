@@ -36,9 +36,9 @@ export default function FAQSection() {
   }
 
   return (
-    <section className="liquid-glass-card rounded-3xl p-6 sm:p-9 mb-8 transition-all">
+    <section className="liquid-neumorph-card rounded-3xl p-6 sm:p-9 mb-8 transition-all">
       <div className="mb-6">
-        <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+        <h3 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
           FAQ Konseling Karier
         </h3>
       </div>
@@ -49,22 +49,24 @@ export default function FAQSection() {
           return (
             <div
               key={index}
-              className={`liquid-glass-subtle rounded-2xl overflow-hidden border transition-all duration-300 ${
-                isOpen ? "border-brand-gold/60 shadow-lg shadow-black/20" : "border-white/10 hover:border-white/20"
+              className={`rounded-2xl overflow-hidden border transition-all duration-300 ${
+                isOpen
+                  ? "liquid-neumorph-inset border-white/20 shadow-md"
+                  : "liquid-glass-subtle border-white/10 hover:border-white/20"
               }`}
             >
               <button
                 type="button"
                 onClick={() => toggle(index)}
-                className="w-full text-left p-4 sm:p-5 flex items-center justify-between gap-4 font-bold text-xs sm:text-sm text-white hover:text-brand-gold transition-colors"
+                className="w-full text-left p-4 sm:p-5 flex items-center justify-between gap-4 font-semibold text-xs sm:text-sm text-white hover:text-amber-300 transition-colors cursor-pointer"
               >
                 <span className="leading-snug">{faq.q}</span>
-                <span className="shrink-0 p-1.5 rounded-xl bg-white/10 text-brand-gold border border-white/10 transition-transform duration-200">
+                <span className="shrink-0 p-1.5 rounded-xl bg-white/10 text-amber-300 border border-white/15 transition-transform duration-200">
                   {isOpen ? <Minus className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
                 </span>
               </button>
               {isOpen && (
-                <div className="px-4 sm:px-5 pb-5 pt-1 text-xs sm:text-sm text-slate-200 leading-relaxed border-t border-white/10 animate-in fade-in duration-200 font-normal">
+                <div className="px-4 sm:px-5 pb-5 pt-2 text-xs sm:text-sm text-slate-300 leading-relaxed border-t border-white/10 animate-in fade-in duration-200 font-normal">
                   {faq.a}
                 </div>
               )}

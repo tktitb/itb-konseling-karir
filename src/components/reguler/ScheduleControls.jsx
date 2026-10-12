@@ -13,15 +13,17 @@ export default function ScheduleControls({
   availableSlots = 0
 }) {
   return (
-    <div className="p-3.5 sm:p-5 rounded-2xl bg-black/30 border border-white/10 backdrop-blur-md mb-6 sm:mb-8">
+    <div className="liquid-neumorph-card p-4 sm:p-5 rounded-2xl mb-6 sm:mb-8 border-t border-l border-white/20">
       <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3.5 sm:gap-4">
         <div className="w-full lg:w-auto">
-          <div className="grid grid-cols-3 gap-1 p-1 rounded-full bg-black/40 border border-white/10">
+          <div className="liquid-neumorph-inset grid grid-cols-3 gap-1.5 p-1.5 rounded-full">
             <button
               type="button"
               onClick={() => onModeTabChange("all")}
-              className={`py-2 px-2 sm:px-4 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                modeTab === "all" ? "liquid-glass-tab-active" : "liquid-glass-tab"
+              className={`py-2 px-3 sm:px-4 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                modeTab === "all"
+                  ? "liquid-neumorph-pill bg-brand-gold/15 text-brand-gold border-t border-brand-gold/30 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               <Layers className="w-3.5 h-3.5 shrink-0" />
@@ -30,8 +32,10 @@ export default function ScheduleControls({
             <button
               type="button"
               onClick={() => onModeTabChange("online")}
-              className={`py-2 px-2 sm:px-4 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                modeTab === "online" ? "liquid-glass-tab-active" : "liquid-glass-tab"
+              className={`py-2 px-3 sm:px-4 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                modeTab === "online"
+                  ? "liquid-neumorph-pill bg-sky-500/15 text-sky-300 border-t border-sky-400/30 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               <Monitor className="w-3.5 h-3.5 shrink-0" />
@@ -40,8 +44,10 @@ export default function ScheduleControls({
             <button
               type="button"
               onClick={() => onModeTabChange("offline")}
-              className={`py-2 px-2 sm:px-4 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
-                modeTab === "offline" ? "liquid-glass-tab-active" : "liquid-glass-tab"
+              className={`py-2 px-3 sm:px-4 rounded-full text-xs font-semibold transition-all flex items-center justify-center gap-1.5 ${
+                modeTab === "offline"
+                  ? "liquid-neumorph-pill bg-brand-gold/15 text-brand-gold border-t border-brand-gold/30 shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
               }`}
             >
               <Building2 className="w-3.5 h-3.5 shrink-0" />
@@ -60,7 +66,7 @@ export default function ScheduleControls({
               id="monthSelect"
               value={selectedMonth}
               onChange={(e) => onMonthChange(e.target.value)}
-              className="liquid-input w-full pl-9 pr-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-slate-900/80 border border-white/15 focus:border-brand-gold cursor-pointer"
+              className="liquid-neumorph-inset w-full pl-9 pr-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-200 bg-[rgba(8,18,28,0.65)] border border-white/10 focus:border-brand-gold/50 focus:ring-1 focus:ring-brand-gold/50 cursor-pointer transition-all"
             >
               {MONTH_NAMES.map((month) => (
                 <option key={month} value={month} className="bg-slate-900 text-white">
@@ -79,7 +85,7 @@ export default function ScheduleControls({
               id="availSelect"
               value={availabilityFilter}
               onChange={(e) => onAvailabilityChange(e.target.value)}
-              className="liquid-input w-full pl-9 pr-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-white bg-slate-900/80 border border-white/15 focus:border-brand-gold cursor-pointer"
+              className="liquid-neumorph-inset w-full pl-9 pr-8 py-2.5 rounded-xl text-xs sm:text-sm font-semibold text-slate-200 bg-[rgba(8,18,28,0.65)] border border-white/10 focus:border-brand-gold/50 focus:ring-1 focus:ring-brand-gold/50 cursor-pointer transition-all"
             >
               <option value="all" className="bg-slate-900 text-white">Semua Jadwal ({totalSlots})</option>
               <option value="available" className="bg-slate-900 text-white">Hanya Tersedia ({availableSlots})</option>

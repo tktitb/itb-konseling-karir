@@ -2,7 +2,7 @@ import React from "react"
 
 export default function Footer() {
   return (
-    <footer className="w-full mt-16 border-t border-white/10 bg-black/40 backdrop-blur-xl text-slate-300">
+    <footer className="w-full mt-16 border-t border-white/10 bg-[rgba(9,21,34,0.70)] backdrop-blur-xl text-slate-300">
       <div className="max-w-container mx-auto px-4 sm:px-6 py-6 flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl overflow-hidden bg-white/95 p-0.5 shadow-md border border-white/20">
@@ -15,7 +15,7 @@ export default function Footer() {
               }}
             />
           </div>
-          <span className="text-sm font-extrabold text-white tracking-wide">
+          <span className="text-sm font-semibold text-white tracking-wide">
             ITB Career Center
           </span>
         </div>

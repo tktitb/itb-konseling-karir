@@ -26,6 +26,9 @@ export default {
           "surface-3": "rgba(16, 32, 50, 0.70)",
           border: "rgba(255, 255, 255, 0.12)",
           "border-strong": "rgba(255, 255, 255, 0.28)",
+          "neumorph-card": "rgba(13, 27, 42, 0.70)",
+          "neumorph-inset": "rgba(8, 18, 28, 0.65)",
+          "neumorph-pill": "rgba(255, 255, 255, 0.08)",
         },
       },
       fontFamily: {
@@ -35,6 +38,10 @@ export default {
         glass: "0 10px 30px 0 rgba(0, 0, 0, 0.35)",
         "glass-lg": "0 20px 45px -10px rgba(0, 0, 0, 0.45)",
         "glass-gold": "0 8px 32px 0 rgba(221, 168, 83, 0.25)",
+        "neumorph-card": "0 20px 40px -15px rgba(0, 0, 0, 0.50), inset 0 1px 1px 0 rgba(255, 255, 255, 0.15), inset 0 -1px 2px 0 rgba(0, 0, 0, 0.40)",
+        "neumorph-inset": "inset 0 2px 4px 0 rgba(0, 0, 0, 0.50), inset 0 0 0 1px rgba(255, 255, 255, 0.06)",
+        "neumorph-pill": "0 4px 12px 0 rgba(0, 0, 0, 0.25), inset 0 1px 0 0 rgba(255, 255, 255, 0.20)",
+        "neumorph-pill-active": "inset 0 2px 4px 0 rgba(0, 0, 0, 0.35), 0 1px 2px 0 rgba(255, 255, 255, 0.10)",
       },
       maxWidth: {
         container: "1160px",

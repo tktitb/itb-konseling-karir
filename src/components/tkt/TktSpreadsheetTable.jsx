@@ -6,7 +6,6 @@ import {
   UserPlus,
   Eye,
   Edit,
-  Trash2,
   MessageCircle,
   ChevronLeft,
   ChevronRight,
@@ -18,6 +17,7 @@ import {
   Check,
   AlertCircle
 } from "lucide-react"
+import { getDefaultWaTemplateKey } from "../../services/tktService"
 
 export default function TktSpreadsheetTable({
   participants = [],
@@ -26,7 +26,6 @@ export default function TktSpreadsheetTable({
   availablePsikologs = [],
   onUpdateStatus,
   onUpdateParticipant,
-  onDeleteParticipant,
   onOpenWalkIn,
   onOpenDetail,
   onOpenEdit,
@@ -290,12 +289,7 @@ export default function TktSpreadsheetTable({
               ) : (
                 paginatedData.map((p, idx) => {
                   const absoluteIdx = (currentPage - 1) * itemsPerPage + idx + 1
-                  const waTemplateKey =
-                    p.status_peserta === "WAITING_LIST"
-                      ? "wa_template_waiting_list"
-                      : p.status_peserta === "HADIR"
-                      ? "wa_template_minta_feedback"
-                      : "wa_template_konfirmasi_sesi"
+                  const waTemplateKey = getDefaultWaTemplateKey(p.status_peserta)
                   const waUrl = getWaLink(waTemplateKey, p)
 
                   return (
@@ -419,14 +413,6 @@ export default function TktSpreadsheetTable({
                               <MessageCircle className="w-3.5 h-3.5" />
                             </a>
                           )}
-
-                          <button
-                            onClick={() => onDeleteParticipant(p)}
-                            title="Hapus Peserta"
-                            className="p-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-600 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
                       </td>
                     </tr>

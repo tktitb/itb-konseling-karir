@@ -68,10 +68,10 @@ export default function TestimonialCarousel() {
   const visibleItems = feedbackList.slice(currentIndex, currentIndex + itemsPerPage)
 
   return (
-    <section className="relative liquid-glass-card rounded-3xl p-6 sm:p-9 mb-8 transition-all">
+    <section className="relative liquid-neumorph-card rounded-3xl p-6 sm:p-9 mb-8 transition-all">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h3 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight">
+          <h3 className="text-xl sm:text-2xl font-semibold text-white tracking-tight">
             Apa kata peserta?
           </h3>
         </div>
@@ -89,23 +89,23 @@ export default function TestimonialCarousel() {
             {visibleItems.map((item) => (
               <div
                 key={item.id}
-                className="liquid-glass-subtle rounded-2xl p-6 relative flex flex-col justify-between border border-white/10 hover:border-brand-gold/40 shadow-lg transition-all duration-300 hover:-translate-y-1.5 group"
+                className="liquid-glass-subtle rounded-2xl p-6 relative flex flex-col justify-between border border-white/10 hover:border-white/20 shadow-md transition-all duration-300 hover:-translate-y-1 group"
               >
                 <div>
-                  <span className="text-4xl text-brand-gold font-serif leading-none mb-3 block select-none">
+                  <span className="text-3xl text-amber-300/80 font-serif leading-none mb-3 block select-none">
                     ❝
                   </span>
-                  <p className="text-xs sm:text-sm text-slate-200 italic leading-relaxed mb-6 font-normal">
+                  <p className="text-xs sm:text-sm text-slate-300 italic leading-relaxed mb-6 font-normal">
                     "{item.feedback}"
                   </p>
                 </div>
 
                 <div className="pt-4 border-t border-white/10 flex items-center justify-between">
                   <div>
-                    <div className="text-xs font-bold text-white name-blur">
+                    <div className="text-xs font-semibold text-white name-blur">
                       {item.name}
                     </div>
-                    <div className="text-[11px] text-brand-gold font-medium mt-0.5">
+                    <div className="text-[11px] text-amber-300 font-medium mt-0.5">
                       {item.category}
                     </div>
                   </div>
@@ -120,7 +120,7 @@ export default function TestimonialCarousel() {
               onClick={handlePrev}
               disabled={currentIndex === 0}
               aria-label="Sebelumnya"
-              className="p-2.5 rounded-full liquid-btn-ghost disabled:opacity-30 disabled:pointer-events-none"
+              className="p-2.5 rounded-full liquid-neumorph-pill text-slate-200 hover:text-white disabled:opacity-30 disabled:pointer-events-none cursor-pointer active:scale-95 transition-all"
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
@@ -129,7 +129,7 @@ export default function TestimonialCarousel() {
               onClick={handleNext}
               disabled={currentIndex >= maxIndex}
               aria-label="Berikutnya"
-              className="p-2.5 rounded-full liquid-btn-ghost disabled:opacity-30 disabled:pointer-events-none"
+              className="p-2.5 rounded-full liquid-neumorph-pill text-slate-200 hover:text-white disabled:opacity-30 disabled:pointer-events-none cursor-pointer active:scale-95 transition-all"
             >
               <ChevronRight className="w-4 h-4" />
             </button>

@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react"
-import { Tv, Clock, RefreshCw, Calendar, Sparkles, UserCheck } from "lucide-react"
-import { getSemuaPeserta, getSystemConfig, subscribePesertaRealtime } from "../../services/tktService"
+import { Tv, RefreshCw, Sparkles } from "lucide-react"
+import {
+  getSemuaPeserta,
+  getSystemConfig,
+  subscribePesertaRealtime,
+  SESI_TKT_META,
+  getActiveEventDates,
+  getPsikologListForDate
+} from "../../services/tktService"
 
 export default function TktDisplayPage() {
   const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString("id-ID"))
@@ -24,8 +31,9 @@ export default function TktDisplayPage() {
       setParticipants(pts || [])
       if (cfg) {
         setConfig(cfg)
-        if (!selectedDay && cfg.tanggal_kegiatan_1) {
-          setSelectedDay(cfg.tanggal_kegiatan_1)
+        const activeDays = getActiveEventDates(cfg)
+        if (activeDays.length > 0 && (!selectedDay || !activeDays.includes(selectedDay))) {
+          setSelectedDay(activeDays[0])
         }
       }
     } finally {
@@ -44,49 +52,33 @@ export default function TktDisplayPage() {
     }
   }, [])
 
-  const sesiList = [
-    "09.00-09.45",
-    "09.50-10.35",
-    "10.40-11.25",
-    "11.30-12.15",
-    "13.15-14.00",
-    "14.05-14.50",
-    "14.55-15.40"
-  ]
-
-  let psikologList = []
-  if (config && selectedDay) {
-    let key = selectedDay === config.tanggal_kegiatan_1 ? "psikolog_list_1" : "psikolog_list_2"
-    if (config[key]) {
-      try {
-        psikologList = JSON.parse(config[key])
-      } catch {
-        psikologList = ["Psikolog 1", "Psikolog 2", "Psikolog 3", "Psikolog 4", "Psikolog 5"]
-      }
-    }
-  }
-
-  const availableDays = []
-  if (config?.tanggal_kegiatan_1) availableDays.push(config.tanggal_kegiatan_1)
-  if (config?.tanggal_kegiatan_2) availableDays.push(config.tanggal_kegiatan_2)
+  const availableDays = config ? getActiveEventDates(config) : []
+  const currentDisplayDay =
+    selectedDay && availableDays.includes(selectedDay)
+      ? selectedDay
+      : availableDays.length > 0
+        ? availableDays[0]
+        : ""
+  const psikologList =
+    config && currentDisplayDay ? getPsikologListForDate(config, currentDisplayDay) : []
 
   return (
     <div className="min-h-screen bg-[#071321] text-white flex flex-col justify-between selection:bg-brand-gold selection:text-brand-navy">
       <header className="px-6 lg:px-10 py-5 border-b border-white/10 bg-[#071321]/80 backdrop-blur-xl flex flex-wrap items-center justify-between gap-4 sticky top-0 z-30">
         <div className="flex items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-brand-gold/15 border border-brand-gold/30 flex items-center justify-center text-brand-gold">
+          <div className="liquid-neumorph-card w-12 h-12 rounded-2xl border-t border-l border-white/20 flex items-center justify-center text-brand-gold">
             <Tv className="w-6 h-6" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-white">
                 Status Antrean Konseling Titian Karir Terpadu
               </h1>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-gold/20 text-brand-gold border border-brand-gold/30 uppercase tracking-wider">
+              <span className="liquid-neumorph-pill px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-brand-gold/15 text-brand-gold border-t border-brand-gold/30 uppercase tracking-wider">
                 Live TV Display
               </span>
             </div>
-            <p className="text-xs text-neutral-400 mt-0.5">
+            <p className="text-xs text-slate-300 mt-0.5">
               Institut Teknologi Bandung Career Center — Silakan pantau nomor bilik & sesi Anda
             </p>
           </div>
@@ -94,13 +86,15 @@ export default function TktDisplayPage() {
 
         <div className="flex items-center gap-6">
           {availableDays.length > 1 && (
-            <div className="flex items-center gap-1.5 bg-white/5 p-1 rounded-xl border border-white/10">
+            <div className="liquid-neumorph-inset flex items-center gap-1.5 p-1 rounded-xl border border-white/10">
               {availableDays.map((d) => (
                 <button
                   key={d}
                   onClick={() => setSelectedDay(d)}
-                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
-                    selectedDay === d ? "bg-brand-gold text-brand-navy" : "text-neutral-400 hover:text-white"
+                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+                    currentDisplayDay === d
+                      ? "liquid-neumorph-pill bg-brand-gold/20 text-brand-gold border-t border-brand-gold/40 shadow-sm"
+                      : "text-slate-400 hover:text-white"
                   }`}
                 >
                   {d}
@@ -110,10 +104,10 @@ export default function TktDisplayPage() {
           )}
 
           <div className="text-right">
-            <div className="text-3xl sm:text-4xl font-black text-brand-gold font-mono tracking-tight tabular-nums">
+            <div className="text-3xl sm:text-4xl font-bold text-brand-gold font-mono tracking-tight tabular-nums">
               {currentTime}
             </div>
-            <div className="text-[10px] text-neutral-400 flex items-center justify-end gap-1 font-semibold uppercase tracking-wider mt-0.5">
+            <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 font-semibold uppercase tracking-wider mt-0.5">
               <RefreshCw className={`w-3 h-3 text-emerald-400 ${refreshing ? "animate-spin" : ""}`} />
               <span>Real-Time Live Sinkron</span>
             </div>
@@ -124,8 +118,8 @@ export default function TktDisplayPage() {
       <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
         {loading ? (
           <div className="h-96 flex flex-col items-center justify-center text-center">
-            <div className="w-10 h-10 border-4 border-brand-gold border-t-transparent rounded-full animate-spin mb-4" />
-            <p className="text-sm font-semibold text-neutral-300">
+            <div className="w-10 h-10 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mb-4" />
+            <p className="text-sm font-semibold text-slate-300">
               Memuat data bilik konseling langsung dari server...
             </p>
           </div>
@@ -136,28 +130,29 @@ export default function TktDisplayPage() {
                 return (
                   <div
                     key={psikologName}
-                    className="rounded-3xl p-5 bg-white/[0.04] backdrop-blur-xl border border-white/10 shadow-[0_15px_40px_rgba(0,0,0,0.4)] flex flex-col justify-between"
+                    className="liquid-neumorph-card rounded-3xl p-5 border-t border-l border-white/20 flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center justify-between pb-3 mb-3 border-b border-white/10">
                         <div className="flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-xl bg-brand-gold/20 text-brand-gold font-black text-xs flex items-center justify-center">
+                          <span className="liquid-neumorph-inset w-7 h-7 rounded-xl border border-white/10 text-brand-gold font-bold text-xs flex items-center justify-center">
                             #{pIdx + 1}
                           </span>
-                          <h3 className="font-extrabold text-sm text-white truncate max-w-[150px]">
+                          <h3 className="font-semibold text-sm text-white truncate max-w-[150px]">
                             {psikologName}
                           </h3>
                         </div>
-                        <span className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider">
+                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                           Bilik {pIdx + 1}
                         </span>
                       </div>
 
                       <div className="space-y-2">
-                        {sesiList.map((sesi) => {
+                        {SESI_TKT_META.map((sesiMeta) => {
+                          const sesi = sesiMeta.id
                           const occupants = participants.filter(
                             (p) =>
-                              p.jadwal_hari === selectedDay &&
+                              p.jadwal_hari === currentDisplayDay &&
                               p.psikolog_bertugas === psikologName &&
                               p.jadwal_sesi === sesi &&
                               !["WAITING_LIST", "BATAL"].includes(p.status_peserta)
@@ -173,18 +168,25 @@ export default function TktDisplayPage() {
                                 key={sesi}
                                 className={`p-2.5 rounded-xl border transition-all ${
                                   isRunning
-                                    ? "bg-brand-navy/90 border-brand-gold/70 shadow-[0_0_20px_rgba(234,160,35,0.25)]"
+                                    ? "liquid-neumorph-card bg-brand-navy/95 border-t-2 border-l border-brand-gold/80 text-white shadow-lg"
                                     : isDone
-                                    ? "bg-purple-950/40 border-purple-800/40 opacity-70"
-                                    : "bg-white/[0.06] border-white/10"
+                                    ? "liquid-neumorph-inset bg-purple-950/30 border border-purple-800/30 opacity-70"
+                                    : "liquid-neumorph-inset border-white/10"
                                 }`}
                               >
-                                <div className="flex items-center justify-between text-[10px] mb-1">
-                                  <span className="font-mono text-neutral-400">{sesi}</span>
+                                <div className="flex items-center justify-between gap-1.5 text-[10px] mb-1.5">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    <span className="px-1.5 py-0.5 rounded-md bg-brand-gold/15 border border-brand-gold/30 text-brand-gold font-bold text-[10px] uppercase tracking-wider shrink-0">
+                                      {sesiMeta.sesiLabel}
+                                    </span>
+                                    <span className="font-mono text-slate-200 font-semibold truncate">
+                                      {sesiMeta.compactTime}
+                                    </span>
+                                  </div>
                                   <span
-                                    className={`px-1.5 py-0.2 rounded font-extrabold uppercase text-[9px] ${
+                                    className={`px-1.5 py-0.5 rounded font-semibold uppercase text-[9px] shrink-0 ${
                                       isRunning
-                                        ? "bg-brand-gold text-brand-navy animate-pulse"
+                                        ? "liquid-neumorph-pill bg-brand-gold text-brand-navy"
                                         : isDone
                                         ? "bg-purple-500/20 text-purple-300"
                                         : "bg-emerald-500/20 text-emerald-300"
@@ -193,7 +195,7 @@ export default function TktDisplayPage() {
                                     {isRunning ? "SESI BERJALAN" : isDone ? "SELESAI" : "TERJADWAL"}
                                   </span>
                                 </div>
-                                <p className="font-bold text-xs text-white truncate">
+                                <p className="font-semibold text-xs text-white truncate">
                                   {occ.nama_lengkap}
                                 </p>
                               </div>
@@ -203,10 +205,17 @@ export default function TktDisplayPage() {
                           return (
                             <div
                               key={sesi}
-                              className="p-2.5 rounded-xl border border-dashed border-white/10 bg-white/[0.02] flex items-center justify-between text-[11px] text-neutral-500 opacity-60"
+                              className="liquid-neumorph-inset p-2.5 rounded-xl border border-white/5 bg-[rgba(8,18,28,0.40)] flex items-center justify-between gap-2 text-[11px] text-slate-500"
                             >
-                              <span className="font-mono text-[10px]">{sesi}</span>
-                              <span className="text-[10px]">Slot Lowong</span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <span className="px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/10 text-slate-300 font-bold text-[10px] uppercase tracking-wider shrink-0">
+                                  {sesiMeta.sesiLabel}
+                                </span>
+                                <span className="font-mono text-[10px] text-slate-400 truncate">
+                                  {sesiMeta.compactTime}
+                                </span>
+                              </div>
+                              <span className="text-[10px] shrink-0">Slot Lowong</span>
                             </div>
                           )
                         })}
@@ -220,7 +229,7 @@ export default function TktDisplayPage() {
         )}
       </main>
 
-      <footer className="px-8 py-3.5 border-t border-white/10 bg-[#071321]/90 backdrop-blur-xl flex flex-wrap items-center justify-between text-xs text-neutral-400">
+      <footer className="px-8 py-3.5 border-t border-white/10 bg-[#071321]/90 backdrop-blur-xl flex flex-wrap items-center justify-between text-xs text-slate-400">
         <div className="flex items-center gap-2">
           <Sparkles className="w-3.5 h-3.5 text-brand-gold" />
           <span>Bagi peserta yang dipanggil harap segera mendekati meja registrasi booth konseling.</span>

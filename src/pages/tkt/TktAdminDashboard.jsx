@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react"
+import React, { useState, useEffect, useCallback, useMemo } from "react"
 import { useNavigate, Link } from "react-router-dom"
 import {
   BarChart3,
@@ -8,10 +8,13 @@ import {
   Settings,
   Tv,
   ExternalLink,
+  ClipboardCheck,
   RefreshCw,
   LogOut,
   Menu,
-  X
+  X,
+  Power,
+  ShieldCheck
 } from "lucide-react"
 import {
   getSemuaPeserta,
@@ -19,12 +22,18 @@ import {
   updateSystemConfig,
   updateStatusPeserta,
   updatePeserta,
-  deletePeserta,
   tambahPesertaManual,
   promosikanWaitingList,
   generateWhatsAppLink,
-  subscribePesertaRealtime
+  formatWhatsAppMessage,
+  subscribePesertaRealtime,
+  getActiveEventDates,
+  getAllActivePsikologs
 } from "../../services/tktService"
+import {
+  verifyAdminSession,
+  logoutAdminSession
+} from "../../services/authService"
 import TktAnalyticsView from "../../components/tkt/admin/TktAnalyticsView"
 import TktBoardView from "../../components/tkt/admin/TktBoardView"
 import TktSpreadsheetView from "../../components/tkt/admin/TktSpreadsheetView"
@@ -35,7 +44,7 @@ import {
   TktDetailModal,
   TktWalkInModal,
   TktEditModal,
-  TktDeleteConfirmModal
+  TktWhatsAppModal
 } from "../../components/tkt/TktModals"
 
 export default function TktAdminDashboard() {
@@ -45,6 +54,7 @@ export default function TktAdminDashboard() {
   const [isScrolled, setIsScrolled] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [togglingReg, setTogglingReg] = useState(false)
   const [participants, setParticipants] = useState([])
   const [config, setConfig] = useState(null)
   const [availableDates, setAvailableDates] = useState([])
@@ -53,11 +63,16 @@ export default function TktAdminDashboard() {
   const [modalWalkInOpen, setModalWalkInOpen] = useState(false)
   const [modalDetailOpen, setModalDetailOpen] = useState(false)
   const [modalEditOpen, setModalEditOpen] = useState(false)
-  const [modalDeleteOpen, setModalDeleteOpen] = useState(false)
+  const [modalWhatsAppOpen, setModalWhatsAppOpen] = useState(false)
+  const [modalLogoutOpen, setModalLogoutOpen] = useState(false)
+  const [loggingOut, setLoggingOut] = useState(false)
   const [selectedParticipant, setSelectedParticipant] = useState(null)
+  const [selectedWaParticipant, setSelectedWaParticipant] = useState(null)
 
-  const adminUser =
-    (typeof window !== "undefined" && sessionStorage.getItem("itbcc_tkt_admin_user")) || "Petugas Admin"
+  const currentSession = verifyAdminSession().session
+  const adminUser = currentSession?.displayName || "Petugas Admin"
+  const adminUsername = currentSession?.username || "admin"
+  const adminRole = currentSession?.role || "Super Admin"
 
   const loadAllData = useCallback(async (isSilent = false) => {
     if (!isSilent) setRefreshing(true)
@@ -66,30 +81,9 @@ export default function TktAdminDashboard() {
       setParticipants(pts || [])
       if (cfg) {
         setConfig(cfg)
-        let dates = []
-        if (cfg.kegiatan_list) {
-          try {
-            const list = JSON.parse(cfg.kegiatan_list)
-            const activeEvent = list.find((e) => e.is_active) || list[0]
-            if (activeEvent && Array.isArray(activeEvent.tanggal) && activeEvent.tanggal.length > 0) {
-              dates = activeEvent.tanggal
-            }
-          } catch {}
-        }
-        if (dates.length === 0) {
-          if (cfg.tanggal_kegiatan_1) dates.push(cfg.tanggal_kegiatan_1)
-          if (cfg.tanggal_kegiatan_2) dates.push(cfg.tanggal_kegiatan_2)
-        }
+        const dates = getActiveEventDates(cfg)
         setAvailableDates(dates)
-
-        let allPsi = []
-        try {
-          const psi1 = JSON.parse(cfg.psikolog_list_1 || "[]")
-          const psi2 = JSON.parse(cfg.psikolog_list_2 || "[]")
-          allPsi = Array.from(new Set([...psi1, ...psi2]))
-        } catch {
-          allPsi = ["Psikolog 1", "Psikolog 2", "Psikolog 3", "Psikolog 4", "Psikolog 5"]
-        }
+        const allPsi = getAllActivePsikologs(cfg, dates)
         setAvailablePsikologs(allPsi)
       }
     } finally {
@@ -97,6 +91,12 @@ export default function TktAdminDashboard() {
       setRefreshing(false)
     }
   }, [])
+
+  const activeParticipants = useMemo(() => {
+    if (!availableDates || availableDates.length === 0) return participants
+    const activeDateSet = new Set(availableDates.map((d) => String(d || "").trim()))
+    return participants.filter((p) => activeDateSet.has(String(p.jadwal_hari || "").trim()))
+  }, [participants, availableDates])
 
   useEffect(() => {
     loadAllData()
@@ -124,10 +124,20 @@ export default function TktAdminDashboard() {
   }, [loadAllData])
 
   const handleLogout = () => {
-    sessionStorage.removeItem("itbcc_tkt_admin_logged")
-    sessionStorage.removeItem("itbcc_tkt_admin_user")
-    sessionStorage.removeItem("itbcc_tkt_admin_login_at")
-    navigate("/tkt/admin-rahasia")
+    setMobileMenuOpen(false)
+    setModalLogoutOpen(true)
+  }
+
+  const handleConfirmLogout = async () => {
+    if (loggingOut) return
+    setLoggingOut(true)
+    try {
+      await logoutAdminSession()
+    } finally {
+      setLoggingOut(false)
+      setModalLogoutOpen(false)
+      navigate("/tkt/admin-rahasia?reason=logged_out", { replace: true })
+    }
   }
 
   const handleUpdateStatus = async (id, newStatus) => {
@@ -153,25 +163,22 @@ export default function TktAdminDashboard() {
     }
   }
 
-  const handleDeleteParticipant = async (id) => {
-    try {
-      await deletePeserta(id)
-      setParticipants((prev) => prev.filter((p) => p.id !== id))
-      setModalDeleteOpen(false)
-    } catch {
-      await loadAllData(true)
-    }
-  }
-
   const handleSaveWalkIn = async (newParticipantData) => {
     try {
-      const inserted = await tambahPesertaManual(newParticipantData)
-      if (inserted) {
-        setParticipants((prev) => [inserted, ...prev])
+      const res = await tambahPesertaManual(newParticipantData)
+      if (res && res.success && res.data) {
+        setParticipants((prev) => [res.data, ...prev])
+        setModalWalkInOpen(false)
+        return { success: true, data: res.data }
+      } else {
+        await loadAllData(true)
+        setModalWalkInOpen(false)
+        return res || { success: true }
       }
-      setModalWalkInOpen(false)
-    } catch {
+    } catch (err) {
       await loadAllData(true)
+      setModalWalkInOpen(false)
+      return { success: false, message: err?.message || "Gagal menyimpan data walk-in" }
     }
   }
 
@@ -191,11 +198,33 @@ export default function TktAdminDashboard() {
     await loadAllData(true)
   }
 
-  const getWaLink = (templateKey, participant) => {
-    if (!config || !participant) return ""
-    const template = config[templateKey] || ""
-    return generateWhatsAppLink(template, participant)
+  const handleToggleRegistration = async () => {
+    if (togglingReg) return
+    const currentStatus = config?.status_pendaftaran || "buka"
+    const newStatus = currentStatus === "buka" ? "tutup" : "buka"
+    setTogglingReg(true)
+    try {
+      await updateSystemConfig("status_pendaftaran", newStatus)
+      setConfig((prev) => (prev ? { ...prev, status_pendaftaran: newStatus } : { status_pendaftaran: newStatus }))
+    } catch {
+      await loadAllData(true)
+    } finally {
+      setTogglingReg(false)
+    }
   }
+
+  const getWaLink = useCallback(
+    (templateKey, participant) => {
+      if (!participant) return ""
+      return formatWhatsAppMessage(participant, templateKey, config)
+    },
+    [config]
+  )
+
+  const handleOpenWhatsAppModal = useCallback((participant) => {
+    setSelectedWaParticipant(participant)
+    setModalWhatsAppOpen(true)
+  }, [])
 
   const navTabs = [
     { id: "table", label: "Master Data", icon: Table },
@@ -205,14 +234,16 @@ export default function TktAdminDashboard() {
     { id: "config", label: "Pengaturan", icon: Settings }
   ]
 
+  const isRegOpen = (config?.status_pendaftaran || "buka") === "buka"
+
   return (
     <div className="min-h-screen text-white relative pb-20">
       <header className="fixed top-3 sm:top-5 left-0 right-0 z-50 w-full px-3 sm:px-6 flex flex-col items-center pointer-events-none mb-6">
         <div
-          className={`pointer-events-auto w-full max-w-4xl sm:max-w-5xl mx-auto rounded-full liquid-glass-navbar px-3.5 sm:px-5 py-2 sm:py-2.5 flex items-center justify-between transition-all duration-300 gap-2 sm:gap-4 ${
+          className={`pointer-events-auto w-full max-w-4xl sm:max-w-5xl mx-auto rounded-full liquid-neumorph-card px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between transition-all duration-300 gap-2 sm:gap-4 border-t border-l border-white/20 ${
             isScrolled
-              ? "shadow-[0_25px_60px_-10px_rgba(0,0,0,0.75)] border-white/30 bg-[#0d1b2a]/90 backdrop-blur-2xl"
-              : "shadow-[0_20px_50px_rgba(0,0,0,0.5)] border-white/20"
+              ? "shadow-2xl bg-[#0d1b2a]/95 backdrop-blur-2xl"
+              : "shadow-xl"
           }`}
         >
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -227,7 +258,7 @@ export default function TktAdminDashboard() {
               />
             </div>
             <div>
-              <h1 className="text-xs sm:text-sm font-extrabold text-white tracking-tight leading-tight">
+              <h1 className="text-xs sm:text-sm font-semibold text-white tracking-tight leading-tight">
                 Admin TKT
               </h1>
               <p className="hidden sm:block text-[10px] text-brand-gold font-semibold tracking-wide">
@@ -236,7 +267,7 @@ export default function TktAdminDashboard() {
             </div>
           </div>
 
-          <nav className="hidden md:flex items-center gap-1 sm:gap-1.5">
+          <nav className="hidden md:flex items-center gap-1 sm:gap-1.5 liquid-neumorph-inset p-1 rounded-full">
             {navTabs.map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -245,17 +276,17 @@ export default function TktAdminDashboard() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   title={tab.label}
-                  className={`group h-9 flex items-center rounded-full transition-all duration-300 cursor-pointer ${
+                  className={`group h-8 sm:h-9 flex items-center rounded-full transition-all duration-300 cursor-pointer ${
                     isActive
-                      ? "bg-white/20 text-white shadow-sm border border-white/30 px-3 sm:px-3.5 gap-2"
-                      : "text-slate-300 hover:text-white hover:bg-white/10 px-2.5 hover:px-3.5 border border-transparent hover:border-white/10 gap-0 hover:gap-1.5"
+                      ? "liquid-neumorph-pill bg-brand-gold/15 text-brand-gold border-t border-brand-gold/30 shadow-sm px-3 sm:px-3.5 gap-2"
+                      : "text-slate-400 hover:text-white px-2.5 hover:px-3.5 gap-0 hover:gap-1.5"
                   }`}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? "text-brand-gold" : "text-slate-300 group-hover:text-white"}`} />
+                  <Icon className={`w-4 h-4 shrink-0 transition-colors ${isActive ? "text-brand-gold" : "text-slate-400 group-hover:text-white"}`} />
                   <span
                     className={`text-xs whitespace-nowrap transition-all duration-300 ease-out overflow-hidden ${
                       isActive
-                        ? "max-w-[120px] opacity-100 font-bold text-white inline-block"
+                        ? "max-w-[120px] opacity-100 font-semibold text-brand-gold inline-block"
                         : "max-w-0 opacity-0 font-medium group-hover:max-w-[120px] group-hover:opacity-100 text-slate-200 inline-block"
                     }`}
                   >
@@ -270,17 +301,40 @@ export default function TktAdminDashboard() {
             <button
               onClick={() => loadAllData()}
               disabled={refreshing}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
+              className="liquid-neumorph-pill w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white border border-white/10 hover:border-white/20 transition-all cursor-pointer disabled:opacity-50 active:scale-95"
               title="Segarkan Data Peserta"
               aria-label="Segarkan Data Peserta"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
             </button>
 
+            <button
+              type="button"
+              onClick={handleToggleRegistration}
+              disabled={togglingReg}
+              className={`liquid-neumorph-pill w-9 h-9 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-95 disabled:opacity-50 ${
+                isRegOpen
+                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 shadow-[0_0_12px_rgba(16,185,129,0.25)]"
+                  : "bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25 shadow-[0_0_12px_rgba(244,63,94,0.25)]"
+              }`}
+              title={
+                isRegOpen
+                  ? "Form Pendaftaran Publik: BUKA (Klik untuk Menutup)"
+                  : "Form Pendaftaran Publik: TUTUP (Klik untuk Membuka)"
+              }
+              aria-label={
+                isRegOpen
+                  ? "Form Pendaftaran Publik: BUKA (Klik untuk Menutup)"
+                  : "Form Pendaftaran Publik: TUTUP (Klik untuk Membuka)"
+              }
+            >
+              <Power className={`w-3.5 h-3.5 ${togglingReg ? "animate-pulse" : ""}`} />
+            </button>
+
             <Link
               to="/tkt/display"
               target="_blank"
-              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all active:scale-95"
+              className="liquid-neumorph-pill w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white border border-white/10 hover:border-white/20 transition-all active:scale-95"
               title="Buka Layar Display Antrean Booth"
               aria-label="Buka Layar Display Antrean Booth"
             >
@@ -290,16 +344,26 @@ export default function TktAdminDashboard() {
             <Link
               to="/tkt"
               target="_blank"
-              className="w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 border border-white/10 hover:border-white/20 transition-all active:scale-95"
+              className="liquid-neumorph-pill w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white border border-white/10 hover:border-white/20 transition-all active:scale-95"
               title="Tinjau Formulir Pendaftaran Publik"
               aria-label="Tinjau Formulir Pendaftaran Publik"
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </Link>
 
+            <Link
+              to="/tkt/feedback"
+              target="_blank"
+              className="liquid-neumorph-pill w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-white border border-white/10 hover:border-white/20 transition-all active:scale-95"
+              title="Tinjau Formulir Feedback Peserta"
+              aria-label="Tinjau Formulir Feedback Peserta"
+            >
+              <ClipboardCheck className="w-3.5 h-3.5 text-brand-gold" />
+            </Link>
+
             <button
               onClick={handleLogout}
-              className="w-9 h-9 rounded-full flex items-center justify-center bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border border-rose-500/20 transition-all cursor-pointer active:scale-95 ml-0.5"
+              className="liquid-neumorph-pill w-9 h-9 rounded-full flex items-center justify-center bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 hover:text-rose-200 border-t border-rose-500/30 transition-all cursor-pointer active:scale-95 ml-0.5"
               title="Keluar dari Sesi Admin"
               aria-label="Keluar dari Sesi Admin"
             >
@@ -311,7 +375,7 @@ export default function TktAdminDashboard() {
             <button
               onClick={() => loadAllData()}
               disabled={refreshing}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 hover:text-white hover:bg-white/10 transition-all cursor-pointer active:scale-95"
+              className="liquid-neumorph-pill w-8 h-8 rounded-full flex items-center justify-center text-slate-300 hover:text-white transition-all cursor-pointer active:scale-95"
               title="Segarkan Data Peserta"
               aria-label="Segarkan Data Peserta"
             >
@@ -319,8 +383,31 @@ export default function TktAdminDashboard() {
             </button>
 
             <button
+              type="button"
+              onClick={handleToggleRegistration}
+              disabled={togglingReg}
+              className={`liquid-neumorph-pill w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer active:scale-95 disabled:opacity-50 ${
+                isRegOpen
+                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 shadow-[0_0_10px_rgba(16,185,129,0.25)]"
+                  : "bg-rose-500/15 text-rose-400 border border-rose-500/30 hover:bg-rose-500/25 shadow-[0_0_10px_rgba(244,63,94,0.25)]"
+              }`}
+              title={
+                isRegOpen
+                  ? "Form Pendaftaran Publik: BUKA (Klik untuk Menutup)"
+                  : "Form Pendaftaran Publik: TUTUP (Klik untuk Membuka)"
+              }
+              aria-label={
+                isRegOpen
+                  ? "Form Pendaftaran Publik: BUKA (Klik untuk Menutup)"
+                  : "Form Pendaftaran Publik: TUTUP (Klik untuk Membuka)"
+              }
+            >
+              <Power className={`w-3.5 h-3.5 ${togglingReg ? "animate-pulse" : ""}`} />
+            </button>
+
+            <button
               onClick={handleLogout}
-              className="w-8 h-8 rounded-full flex items-center justify-center bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/20 transition-all cursor-pointer active:scale-95"
+              className="liquid-neumorph-pill w-8 h-8 rounded-full flex items-center justify-center bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border-t border-rose-500/30 transition-all cursor-pointer active:scale-95"
               title="Keluar dari Sesi Admin"
               aria-label="Keluar dari Sesi Admin"
             >
@@ -330,7 +417,7 @@ export default function TktAdminDashboard() {
             <button
               type="button"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-white hover:bg-white/10 border border-white/15 transition-all cursor-pointer active:scale-95 focus:outline-none"
+              className="liquid-neumorph-pill w-8 h-8 rounded-full flex items-center justify-center text-white border border-white/15 transition-all cursor-pointer active:scale-95 focus:outline-none"
               title="Menu Navigasi"
               aria-label="Menu Navigasi"
             >
@@ -342,11 +429,11 @@ export default function TktAdminDashboard() {
         {mobileMenuOpen && (
           <>
             <div
-              className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden pointer-events-auto"
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-md md:hidden pointer-events-auto"
               onClick={() => setMobileMenuOpen(false)}
               aria-hidden="true"
             />
-            <div className="relative z-50 md:hidden pointer-events-auto w-full max-w-4xl mx-auto mt-2 p-3 rounded-2xl liquid-glass-navbar shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
+            <div className="relative z-50 md:hidden pointer-events-auto w-full max-w-4xl mx-auto mt-2 p-3 rounded-2xl liquid-neumorph-card border-t border-l border-white/20 shadow-2xl animate-in fade-in slide-in-from-top-2 duration-200">
               <nav className="flex flex-col gap-1.5">
                 {navTabs.map((tab) => {
                   const Icon = tab.icon
@@ -358,49 +445,84 @@ export default function TktAdminDashboard() {
                         setActiveTab(tab.id)
                         setMobileMenuOpen(false)
                       }}
-                      className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-3 transition-all cursor-pointer ${
+                      className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold flex items-center gap-3 transition-all cursor-pointer ${
                         isActive
-                          ? "bg-white/20 text-white border border-white/30 shadow-sm"
-                          : "text-slate-200 hover:bg-white/10 hover:text-white"
+                          ? "liquid-neumorph-pill bg-brand-gold/15 text-brand-gold border-t border-brand-gold/30 shadow-sm"
+                          : "text-slate-300 hover:text-white"
                       }`}
                     >
-                      <Icon className={`w-4 h-4 ${isActive ? "text-brand-gold" : "text-slate-300"}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? "text-brand-gold" : "text-slate-400"}`} />
                       <span>{tab.label}</span>
                     </button>
                   )
                 })}
               </nav>
 
-              <div className="border-t border-white/10 mt-3 pt-3 grid grid-cols-2 gap-2">
-                <Link
-                  to="/tkt/display"
-                  target="_blank"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 border border-white/10"
-                >
-                  <Tv className="w-3.5 h-3.5 text-brand-gold" />
-                  <span>Layar Booth</span>
-                </Link>
+              <div className="border-t border-white/10 mt-3 pt-3 flex flex-col gap-2">
+                <div className="flex items-center justify-between px-3 py-2 rounded-xl liquid-neumorph-inset text-xs">
+                  <span className="text-slate-300 font-medium">Form Pendaftaran:</span>
+                  <button
+                    type="button"
+                    onClick={handleToggleRegistration}
+                    disabled={togglingReg}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer active:scale-95 ${
+                      isRegOpen
+                        ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30"
+                        : "bg-rose-500/20 text-rose-300 border border-rose-500/30"
+                    }`}
+                  >
+                    <Power className="w-3 h-3" />
+                    <span>{isRegOpen ? "Buka" : "Tutup"}</span>
+                  </button>
+                </div>
 
-                <Link
-                  to="/tkt"
-                  target="_blank"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="px-3 py-2 rounded-xl text-xs font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-center gap-2 border border-white/10"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Form Publik</span>
-                </Link>
+                <div className="grid grid-cols-3 gap-2">
+                  <Link
+                    to="/tkt/display"
+                    target="_blank"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="liquid-neumorph-inset px-2.5 py-2 rounded-xl text-[11px] font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-center gap-1.5 border border-white/10"
+                  >
+                    <Tv className="w-3.5 h-3.5 text-brand-gold shrink-0" />
+                    <span className="truncate">Layar Booth</span>
+                  </Link>
+
+                  <Link
+                    to="/tkt"
+                    target="_blank"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="liquid-neumorph-inset px-2.5 py-2 rounded-xl text-[11px] font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-center gap-1.5 border border-white/10"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">Form Publik</span>
+                  </Link>
+
+                  <Link
+                    to="/tkt/feedback"
+                    target="_blank"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="liquid-neumorph-inset px-2.5 py-2 rounded-xl text-[11px] font-semibold text-slate-200 hover:bg-white/10 flex items-center justify-center gap-1.5 border border-white/10"
+                  >
+                    <ClipboardCheck className="w-3.5 h-3.5 text-brand-gold shrink-0" />
+                    <span className="truncate">Form Feedback</span>
+                  </Link>
+                </div>
               </div>
             </div>
           </>
         )}
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-28">
+      <main
+        className={`mx-auto pt-24 sm:pt-28 transition-all duration-200 ${
+          activeTab === "table" || activeTab === "matrix"
+            ? "w-full max-w-full px-2.5 sm:px-5 lg:px-6"
+            : "max-w-7xl px-4 sm:px-6 lg:px-8"
+        }`}
+      >
         {loading ? (
           <div className="py-24 text-center">
-            <div className="w-8 h-8 border-2 border-amber-400 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+            <div className="w-8 h-8 border-2 border-brand-gold border-t-transparent rounded-full animate-spin mx-auto mb-3" />
             <p className="text-xs font-medium text-slate-400">
               Memuat data operasional Titian Karir Terpadu...
             </p>
@@ -408,35 +530,42 @@ export default function TktAdminDashboard() {
         ) : (
           <div>
             {activeTab === "analytics" && (
-              <TktAnalyticsView participants={participants} />
+              <TktAnalyticsView participants={activeParticipants} />
             )}
 
             {activeTab === "matrix" && (
               <TktBoardView
-                participants={participants}
+                participants={activeParticipants}
                 config={config}
                 availableDates={availableDates}
+                availablePsikologs={availablePsikologs}
                 onOpenDetail={(p) => {
                   setSelectedParticipant(p)
                   setModalDetailOpen(true)
                 }}
+                onOpenEdit={(p) => {
+                  setSelectedParticipant(p)
+                  setModalEditOpen(true)
+                }}
+                onUpdateStatus={handleUpdateStatus}
+                onUpdateParticipant={handleUpdateParticipant}
+                onSaveWalkIn={handleSaveWalkIn}
+                onOpenWhatsApp={handleOpenWhatsAppModal}
+                onPromoteWaitingList={handlePromoteWaitingList}
                 getWaLink={getWaLink}
               />
             )}
 
             {activeTab === "table" && (
               <TktSpreadsheetView
-                participants={participants}
+                participants={activeParticipants}
                 config={config}
                 availableDates={availableDates}
                 availablePsikologs={availablePsikologs}
                 onUpdateStatus={handleUpdateStatus}
                 onUpdateParticipant={handleUpdateParticipant}
-                onDeleteParticipant={(p) => {
-                  setSelectedParticipant(p)
-                  setModalDeleteOpen(true)
-                }}
                 onOpenWalkIn={() => setModalWalkInOpen(true)}
+                onSaveWalkIn={handleSaveWalkIn}
                 onOpenDetail={(p) => {
                   setSelectedParticipant(p)
                   setModalDetailOpen(true)
@@ -446,10 +575,16 @@ export default function TktAdminDashboard() {
                   setModalEditOpen(true)
                 }}
                 getWaLink={getWaLink}
+                onOpenWhatsApp={handleOpenWhatsAppModal}
               />
             )}
 
-            {activeTab === "feedback" && <TktFeedbackView />}
+            {activeTab === "feedback" && (
+              <TktFeedbackView
+                availableDates={availableDates}
+                participants={activeParticipants}
+              />
+            )}
 
             {activeTab === "config" && (
               <TktConfigTab
@@ -467,6 +602,13 @@ export default function TktAdminDashboard() {
         isOpen={modalDetailOpen}
         onClose={() => setModalDetailOpen(false)}
         participant={selectedParticipant}
+        getWaLink={getWaLink}
+        onOpenWhatsApp={handleOpenWhatsAppModal}
+        onEdit={(p) => {
+          setModalDetailOpen(false)
+          setSelectedParticipant(p)
+          setModalEditOpen(true)
+        }}
       />
 
       <TktWalkInModal
@@ -486,12 +628,88 @@ export default function TktAdminDashboard() {
         psikologList={availablePsikologs}
       />
 
-      <TktDeleteConfirmModal
-        isOpen={modalDeleteOpen}
-        onClose={() => setModalDeleteOpen(false)}
-        onConfirm={handleDeleteParticipant}
-        participant={selectedParticipant}
+      <TktWhatsAppModal
+        isOpen={modalWhatsAppOpen}
+        onClose={() => setModalWhatsAppOpen(false)}
+        participant={selectedWaParticipant}
+        config={config || {}}
       />
+
+      {modalLogoutOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => !loggingOut && setModalLogoutOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-3xl liquid-neumorph-card p-6 sm:p-7 border-t border-l border-white/25 shadow-2xl relative animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl liquid-neumorph-inset border border-rose-500/30 flex items-center justify-center text-rose-300 shrink-0">
+                  <LogOut className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-semibold text-white leading-tight">
+                    Keluar dari Sesi Panel Admin?
+                  </h3>
+                  <p className="text-xs text-slate-300 mt-0.5">
+                    Konfirmasi keamanan penutupan sesi kerja
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={loggingOut}
+                onClick={() => setModalLogoutOpen(false)}
+                className="w-8 h-8 rounded-full liquid-neumorph-pill flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer"
+                aria-label="Tutup dialog"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="liquid-neumorph-inset p-3.5 rounded-2xl border border-white/10 mb-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <ShieldCheck className="w-4 h-4 text-brand-gold shrink-0" />
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-white truncate">{adminUser}</p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    ID: {adminUsername} • {adminRole}
+                  </p>
+                </div>
+              </div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 shrink-0">
+                Sesi Aktif
+              </span>
+            </div>
+
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mb-6">
+              Sesi kerja Anda pada perangkat ini beserta tab Panel Admin lain yang sedang terbuka akan ditutup. Anda dapat masuk kembali kapan saja menggunakan kredensial staf.
+            </p>
+
+            <div className="flex flex-col-reverse sm:flex-row items-center justify-end gap-2.5">
+              <button
+                type="button"
+                disabled={loggingOut}
+                onClick={() => setModalLogoutOpen(false)}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-white/20 text-xs sm:text-sm font-semibold text-slate-200 hover:text-white transition-all cursor-pointer active:scale-95"
+              >
+                Tetap di Panel Admin
+              </button>
+              <button
+                type="button"
+                disabled={loggingOut}
+                onClick={handleConfirmLogout}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl liquid-neumorph-btn bg-rose-500/20 hover:bg-rose-500/30 border-t border-rose-500/40 text-xs sm:text-sm font-semibold text-rose-200 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95 disabled:opacity-60"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>{loggingOut ? "Menutup Sesi..." : "Ya, Keluar Sekarang"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
