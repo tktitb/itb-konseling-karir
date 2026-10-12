@@ -719,8 +719,9 @@ export async function checkPesertaFeedbackExists(pesertaId) {
 
 export async function getPesertaForFeedbackByWhatsApp(rawNomorWa) {
   try {
+    const cleanTarget = normalizeWhatsAppNumber(rawNomorWa)
     const variants = getWhatsAppVariants(rawNomorWa)
-    if (variants.length === 0) {
+    if (!cleanTarget && variants.length === 0) {
       return { found: false }
     }
 
@@ -734,8 +735,23 @@ export async function getPesertaForFeedbackByWhatsApp(rawNomorWa) {
         .order("created_at", { ascending: false })
     ])
 
-    const { data: candidates, error } = queryRes
-    if (error || !candidates || candidates.length === 0) {
+    let candidates = queryRes.data || []
+
+    if ((!candidates || candidates.length === 0) && cleanTarget) {
+      const { data: allActive } = await supabase
+        .from("peserta_konseling")
+        .select("id, nama_lengkap, email, nomor_wa, jadwal_hari, jadwal_sesi, psikolog_bertugas, status_peserta")
+        .neq("status_peserta", "BATAL")
+        .order("created_at", { ascending: false })
+
+      if (allActive && allActive.length > 0) {
+        candidates = allActive.filter(
+          (c) => normalizeWhatsAppNumber(c.nomor_wa || "") === cleanTarget
+        )
+      }
+    }
+
+    if (!candidates || candidates.length === 0) {
       return { found: false }
     }
 
@@ -768,8 +784,7 @@ export async function getPesertaForFeedbackByWhatsApp(rawNomorWa) {
     const targetPool = unsubmittedPool.length > 0 ? unsubmittedPool : pool
 
     const participant =
-      targetPool.find((c) => c.status_peserta === "HADIR") ||
-      targetPool.find((c) => c.status_peserta === "SELESAI_FULL") ||
+      targetPool.find((c) => c.status_peserta === "SELESAI_FULL" || c.status_peserta === "HADIR") ||
       targetPool.find((c) => c.status_peserta === "CONFIRMED") ||
       targetPool.find((c) => c.status_peserta === "DAPAT_SESI") ||
       targetPool[0]
@@ -791,7 +806,8 @@ export async function getPesertaForFeedbackByWhatsApp(rawNomorWa) {
 export async function submitFeedback(feedbackData) {
   try {
     const rawWa = String(feedbackData.nomor_wa_pengisi || "").trim()
-    const emailClean = String(feedbackData.email_pengisi || "").trim()
+    const rawEmail = String(feedbackData.email_pengisi || "").trim()
+    const emailClean = rawEmail === "-" ? "" : rawEmail
     const explicitPesertaId = String(feedbackData.peserta_id || "").trim()
 
     let participant = null
@@ -814,26 +830,16 @@ export async function submitFeedback(feedbackData) {
       }
     }
 
-    if (
-      participant.status_peserta === "BATAL" ||
-      participant.status_peserta === "WAITING_LIST"
-    ) {
+    if (participant.status_peserta === "BATAL") {
       return {
         success: false,
-        message: "Anda hanya dapat mengisi feedback untuk jadwal sesi konseling yang aktif."
+        message: "Jadwal sesi konseling ini tercatat telah dibatalkan sehingga tidak dapat mengisi evaluasi."
       }
     }
 
-    const alreadyHasFeedback = await checkPesertaFeedbackExists(participant.id)
-    if (alreadyHasFeedback) {
-      return {
-        success: false,
-        message: "Anda sudah pernah mengisi feedback untuk sesi konseling ini sebelumnya."
-      }
-    }
-
+    const participantEmail = String(participant.email || "").trim()
     const finalNama = String(feedbackData.nama_pengisi || participant.nama_lengkap || "").trim()
-    const finalEmail = emailClean || String(participant.email || "").trim()
+    const finalEmail = emailClean || (participantEmail === "-" ? "" : participantEmail)
     const finalWa = rawWa || String(participant.nomor_wa || "").trim()
 
     const feedbackInsertData = {
@@ -857,18 +863,46 @@ export async function submitFeedback(feedbackData) {
       saran_feedback: String(feedbackData.saran_feedback || "").trim() || null
     }
 
-    const { error: insertError } = await supabase
+    const { data: existingRows } = await supabase
       .from("peserta_feedback")
-      .insert([feedbackInsertData])
-    if (insertError) throw insertError
+      .select("id")
+      .eq("peserta_id", participant.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
 
-    const { error: updateStatusError } = await supabase
-      .from("peserta_konseling")
-      .update({ status_peserta: "SELESAI_FULL" })
-      .eq("id", participant.id)
-    if (updateStatusError) throw updateStatusError
+    if (existingRows && existingRows.length > 0 && existingRows[0].id) {
+      const { error: updateFeedbackError } = await supabase
+        .from("peserta_feedback")
+        .update(feedbackInsertData)
+        .eq("id", existingRows[0].id)
+      if (updateFeedbackError) {
+        const { error: fallbackInsertError } = await supabase
+          .from("peserta_feedback")
+          .insert([feedbackInsertData])
+        if (fallbackInsertError) throw fallbackInsertError
+      }
+    } else {
+      const { error: insertError } = await supabase
+        .from("peserta_feedback")
+        .insert([feedbackInsertData])
+      if (insertError) throw insertError
+    }
 
-    return { success: true, participant }
+    if (participant.status_peserta !== "SELESAI_FULL") {
+      const { error: updateStatusError } = await supabase
+        .from("peserta_konseling")
+        .update({ status_peserta: "SELESAI_FULL" })
+        .eq("id", participant.id)
+      if (updateStatusError) throw updateStatusError
+    }
+
+    return {
+      success: true,
+      participant: {
+        ...participant,
+        status_peserta: "SELESAI_FULL"
+      }
+    }
   } catch (err) {
     return {
       success: false,

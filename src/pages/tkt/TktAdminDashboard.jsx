@@ -530,7 +530,12 @@ export default function TktAdminDashboard() {
         ) : (
           <div>
             {activeTab === "analytics" && (
-              <TktAnalyticsView participants={activeParticipants} />
+              <TktAnalyticsView
+                participants={activeParticipants}
+                config={config}
+                availableDates={availableDates}
+                availablePsikologs={availablePsikologs}
+              />
             )}
 
             {activeTab === "matrix" && (

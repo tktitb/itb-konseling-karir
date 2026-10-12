@@ -1,4 +1,4 @@
-import React from "react"
+import React, { useState, useMemo } from "react"
 import {
   Users,
   CheckCircle2,
@@ -9,286 +9,655 @@ import {
   Target,
   FileText,
   Compass,
-  Layers
+  Briefcase,
+  BookOpen,
+  Sparkles,
+  UserCheck,
+  Award,
+  Calendar
 } from "lucide-react"
-import { ENABLE_TKT_WAITING_LIST } from "../../../services/tktService"
+import {
+  ENABLE_TKT_WAITING_LIST,
+  SESI_TKT_META,
+  getPsikologListForDate
+} from "../../../services/tktService"
 
-export default function TktAnalyticsView({ participants = [] }) {
-  const total = participants.length
-  const countConfirmed = participants.filter((p) =>
+export default function TktAnalyticsView({
+  participants = [],
+  config = {},
+  availableDates = [],
+  availablePsikologs = []
+}) {
+  const [selectedDate, setSelectedDate] = useState("ALL")
+
+  const filteredParticipants = useMemo(() => {
+    if (selectedDate === "ALL") return participants
+    return participants.filter((p) => p.jadwal_hari === selectedDate)
+  }, [participants, selectedDate])
+
+  const totalCapacitySlots = useMemo(() => {
+    const sessionsPerDay = SESI_TKT_META.length
+    if (selectedDate !== "ALL") {
+      const psiList = getPsikologListForDate(config, selectedDate)
+      return (psiList?.length || 5) * sessionsPerDay
+    }
+    if (availableDates && availableDates.length > 0) {
+      return availableDates.reduce((sum, dateStr) => {
+        const psiList = getPsikologListForDate(config, dateStr)
+        return sum + (psiList?.length || 5) * sessionsPerDay
+      }, 0)
+    }
+    return 70
+  }, [config, selectedDate, availableDates])
+
+  const total = filteredParticipants.length
+  const activeScheduled = filteredParticipants.filter(
+    (p) => !["WAITING_LIST", "BATAL"].includes(p.status_peserta)
+  ).length
+  const countConfirmed = filteredParticipants.filter((p) =>
     ["CONFIRMED", "DAPAT_SESI"].includes(p.status_peserta)
   ).length
-  const countHadir = participants.filter((p) =>
+  const countHadir = filteredParticipants.filter((p) =>
     ["HADIR", "SELESAI_FULL"].includes(p.status_peserta)
   ).length
-  const countWaiting = participants.filter((p) => p.status_peserta === "WAITING_LIST").length
-  const countBatal = participants.filter((p) => p.status_peserta === "BATAL").length
-
-  const countITB = participants.filter((p) =>
-    (p.asal_univ || "").toLowerCase().includes("institut teknologi bandung")
+  const countWaiting = filteredParticipants.filter(
+    (p) => p.status_peserta === "WAITING_LIST"
   ).length
-  const countNonITB = total - countITB
+  const countBatal = filteredParticipants.filter(
+    (p) => p.status_peserta === "BATAL"
+  ).length
+
+  const occupancyPct =
+    totalCapacitySlots > 0
+      ? Math.min(100, Math.round((activeScheduled / totalCapacitySlots) * 100))
+      : 0
+
+  const countITB = filteredParticipants.filter(
+    (p) =>
+      (p.asal_univ || "").toLowerCase().includes("institut teknologi bandung") ||
+      (p.status_mhs || "").includes("ITB") && !(p.status_mhs || "").includes("Non-ITB")
+  ).length
+  const countNonITB = Math.max(0, total - countITB)
   const pctITB = total > 0 ? Math.round((countITB / total) * 100) : 0
   const pctNonITB = total > 0 ? 100 - pctITB : 0
 
-  const countCV = participants.filter((p) => p.harapan_sesi === "CV Review").length
-  const countKarier = participants.filter((p) => p.harapan_sesi === "Konsultasi Karier").length
-  const countKeduanya = participants.filter((p) => p.harapan_sesi === "Keduanya").length
+  const countMemberItbCc = filteredParticipants.filter(
+    (p) => p.is_member_itbcc === true || String(p.is_member_itbcc) === "true"
+  ).length
+  const pctMemberItbCc = total > 0 ? Math.round((countMemberItbCc / total) * 100) : 0
 
-  const pctCV = total > 0 ? Math.round((countCV / total) * 100) : 0
-  const pctKarier = total > 0 ? Math.round((countKarier / total) * 100) : 0
-  const pctKeduanya = total > 0 ? Math.round((countKeduanya / total) * 100) : 0
+  const statusMhsCategories = useMemo(() => {
+    const categories = [
+      { label: "Mahasiswa Aktif ITB", color: "bg-amber-400" },
+      { label: "Alumni ITB", color: "bg-brand-gold" },
+      { label: "Mahasiswa Non-ITB", color: "bg-sky-400" },
+      { label: "Alumni Non-ITB", color: "bg-blue-400" },
+      { label: "Umum", color: "bg-emerald-400" }
+    ]
+    return categories.map((cat) => {
+      const count = filteredParticipants.filter((p) => {
+        if (cat.label === "Mahasiswa Aktif ITB") {
+          return p.status_mhs === "Mahasiswa Aktif ITB" || p.status_mhs === "Mahasiswa"
+        }
+        if (cat.label === "Alumni ITB") {
+          return (
+            p.status_mhs === "Alumni ITB" ||
+            (p.status_mhs === "Alumni" &&
+              (p.asal_univ || "").toLowerCase().includes("institut teknologi bandung"))
+          )
+        }
+        if (cat.label === "Alumni Non-ITB") {
+          return (
+            p.status_mhs === "Alumni Non-ITB" ||
+            (p.status_mhs === "Alumni" &&
+              !(p.asal_univ || "").toLowerCase().includes("institut teknologi bandung"))
+          )
+        }
+        return p.status_mhs === cat.label
+      }).length
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0
+      return { ...cat, count, pct }
+    })
+  }, [filteredParticipants, total])
 
   const allStatusBreakdown = [
-    { label: "Dapat Sesi", count: participants.filter((p) => p.status_peserta === "DAPAT_SESI").length, color: "bg-sky-400" },
-    { label: "Terkonfirmasi", count: participants.filter((p) => p.status_peserta === "CONFIRMED").length, color: "bg-emerald-400" },
-    { label: "Hadir di Lokasi", count: participants.filter((p) => p.status_peserta === "HADIR").length, color: "bg-amber-400" },
-    { label: "Selesai Sesi", count: participants.filter((p) => p.status_peserta === "SELESAI_FULL").length, color: "bg-blue-400" },
-    { label: "Waiting List", count: countWaiting, color: "bg-amber-500/80" },
-    { label: "Batal", count: countBatal, color: "bg-rose-400" }
+    {
+      label: "Dapat Sesi (Menunggu Konfirmasi)",
+      count: filteredParticipants.filter((p) => p.status_peserta === "DAPAT_SESI").length,
+      color: "bg-sky-400"
+    },
+    {
+      label: "Terkonfirmasi Hadir",
+      count: filteredParticipants.filter((p) => p.status_peserta === "CONFIRMED").length,
+      color: "bg-emerald-400"
+    },
+    {
+      label: "Hadir di Lokasi Konseling",
+      count: filteredParticipants.filter((p) => p.status_peserta === "HADIR").length,
+      color: "bg-amber-400"
+    },
+    {
+      label: "Selesai Sesi Konseling",
+      count: filteredParticipants.filter((p) => p.status_peserta === "SELESAI_FULL").length,
+      color: "bg-blue-400"
+    },
+    {
+      label: "Waiting List",
+      count: countWaiting,
+      color: "bg-amber-500/80"
+    },
+    {
+      label: "Batal / Dibatalkan",
+      count: countBatal,
+      color: "bg-rose-400"
+    }
   ]
 
   const statusBreakdown = allStatusBreakdown.filter(
     (item) => ENABLE_TKT_WAITING_LIST || item.label !== "Waiting List"
   )
 
+  const harapanBreakdown = useMemo(() => {
+    const items = [
+      {
+        key: "Konsultasi Karier",
+        title: "Konsultasi Karier",
+        subtitle: "Eksplorasi minat, arah karier & pengembangan diri",
+        icon: Compass,
+        accentText: "text-sky-300",
+        accentBar: "bg-sky-400",
+        pillClass: "bg-sky-500/15 border-sky-400/30 text-sky-300",
+        matcher: (val) => val === "Konsultasi Karier" || val === "Keduanya"
+      },
+      {
+        key: "Review CV & Portofolio",
+        title: "Review CV & Portofolio",
+        subtitle: "Bedah kualitas resume, CV & portofolio kerja",
+        icon: FileText,
+        accentText: "text-brand-gold",
+        accentBar: "bg-amber-400",
+        pillClass: "bg-amber-500/15 border-amber-400/30 text-brand-gold",
+        matcher: (val) => val === "Review CV & Portofolio" || val === "CV Review"
+      },
+      {
+        key: "Persiapan Wawancara Kerja",
+        title: "Persiapan Wawancara Kerja",
+        subtitle: "Simulasi & strategi menghadapi interview rekrutmen",
+        icon: Briefcase,
+        accentText: "text-emerald-300",
+        accentBar: "bg-emerald-400",
+        pillClass: "bg-emerald-500/15 border-emerald-400/30 text-emerald-300",
+        matcher: (val) => val === "Persiapan Wawancara Kerja"
+      },
+      {
+        key: "Perencanaan Studi Lanjut",
+        title: "Perencanaan Studi Lanjut",
+        subtitle: "Konsultasi pemilihan studi pascasarjana & beasiswa",
+        icon: BookOpen,
+        accentText: "text-blue-300",
+        accentBar: "bg-blue-400",
+        pillClass: "bg-blue-500/15 border-blue-400/30 text-blue-300",
+        matcher: (val) => val === "Perencanaan Studi Lanjut"
+      },
+      {
+        key: "Lainnya",
+        title: "Kebutuhan Lainnya",
+        subtitle: "Topik spesifik di luar kategori utama",
+        icon: Sparkles,
+        accentText: "text-slate-200",
+        accentBar: "bg-slate-300",
+        pillClass: "bg-white/10 border-white/25 text-white",
+        matcher: (val) =>
+          val === "Lainnya" ||
+          (Boolean(val) &&
+            ![
+              "Konsultasi Karier",
+              "Keduanya",
+              "Review CV & Portofolio",
+              "CV Review",
+              "Persiapan Wawancara Kerja",
+              "Perencanaan Studi Lanjut"
+            ].includes(val))
+      }
+    ]
+
+    return items.map((item) => {
+      const count = filteredParticipants.filter((p) => item.matcher(p.harapan_sesi)).length
+      const pct = total > 0 ? Math.round((count / total) * 100) : 0
+      return { ...item, count, pct }
+    })
+  }, [filteredParticipants, total])
+
+  const psikologWorkload = useMemo(() => {
+    const activePsikologSet = new Set()
+    if (selectedDate !== "ALL") {
+      const list = getPsikologListForDate(config, selectedDate)
+      list.forEach((name) => activePsikologSet.add(name))
+    } else if (availablePsikologs && availablePsikologs.length > 0) {
+      availablePsikologs.forEach((name) => activePsikologSet.add(name))
+    }
+
+    filteredParticipants.forEach((p) => {
+      if (p.psikolog_bertugas && !["WAITING_LIST", "BATAL"].includes(p.status_peserta)) {
+        activePsikologSet.add(p.psikolog_bertugas)
+      }
+    })
+
+    const maxSesiPerPsikolog =
+      selectedDate !== "ALL"
+        ? SESI_TKT_META.length
+        : Math.max(1, availableDates.length) * SESI_TKT_META.length
+
+    return Array.from(activePsikologSet).map((name) => {
+      const assigned = filteredParticipants.filter(
+        (p) =>
+          p.psikolog_bertugas === name &&
+          !["WAITING_LIST", "BATAL"].includes(p.status_peserta)
+      )
+      const selesaiCount = assigned.filter((p) =>
+        ["HADIR", "SELESAI_FULL"].includes(p.status_peserta)
+      ).length
+      const count = assigned.length
+      const pct =
+        maxSesiPerPsikolog > 0
+          ? Math.min(100, Math.round((count / maxSesiPerPsikolog) * 100))
+          : 0
+      return {
+        name,
+        count,
+        selesaiCount,
+        maxSesi: maxSesiPerPsikolog,
+        pct
+      }
+    })
+  }, [filteredParticipants, config, selectedDate, availablePsikologs, availableDates])
+
   return (
     <div className="space-y-6">
+      <div className="liquid-neumorph-card p-3 sm:p-4 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-t border-l border-white/20 shadow-xl">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <div className="liquid-neumorph-inset flex items-center gap-1.5 p-1 rounded-2xl border border-white/10">
+            <button
+              type="button"
+              onClick={() => setSelectedDate("ALL")}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                selectedDate === "ALL"
+                  ? "bg-brand-gold text-[#07131e] font-bold shadow-md"
+                  : "text-slate-300 hover:text-white"
+              }`}
+            >
+              Semua Hari
+            </button>
+            {availableDates.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setSelectedDate(d)}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all cursor-pointer whitespace-nowrap ${
+                  selectedDate === d
+                    ? "bg-brand-gold text-[#07131e] font-bold shadow-md"
+                    : "text-slate-300 hover:text-white"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="px-3.5 py-2 rounded-2xl liquid-neumorph-inset border border-white/10 text-xs font-semibold text-slate-200 flex items-center gap-2">
+            <Calendar className="w-3.5 h-3.5 text-brand-gold shrink-0" />
+            <span>
+              Okupansi Jadwal:{" "}
+              <strong className="text-brand-gold font-mono">{activeScheduled}</strong> /{" "}
+              <span className="font-mono text-slate-300">{totalCapacitySlots}</span> Sesi (
+              {occupancyPct}%)
+            </span>
+          </div>
+        </div>
+      </div>
+
       <div
         className={`grid ${
-          ENABLE_TKT_WAITING_LIST ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-3"
-        } gap-4`}
+          ENABLE_TKT_WAITING_LIST
+            ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+            : "grid-cols-1 sm:grid-cols-3"
+        } gap-4 sm:gap-5`}
       >
-        <div className="liquid-neumorph-card p-5 relative overflow-hidden group border-t border-l border-white/20 hover:-translate-y-0.5 transition-transform">
+        <div className="liquid-neumorph-card p-5 sm:p-6 rounded-3xl relative overflow-hidden group border-t border-l border-white/20 shadow-xl hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+            <span className="text-xs font-semibold text-slate-300 uppercase tracking-wider">
               Total Pendaftar
             </span>
-            <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-sky-500/10 border-t border-sky-400/25 flex items-center justify-center text-sky-400">
-              <Users className="w-4 h-4" />
+            <div className="liquid-neumorph-pill w-10 h-10 rounded-2xl bg-sky-500/15 border-t border-sky-400/30 flex items-center justify-center text-sky-300">
+              <Users className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-semibold text-white tracking-tight">{total}</span>
-            <span className="text-xs text-slate-400 font-medium">peserta</span>
+            <span className="text-3xl sm:text-4xl font-bold text-white tracking-tight font-mono">
+              {total}
+            </span>
+            <span className="text-xs text-slate-300 font-semibold">peserta</span>
           </div>
-          <p className="mt-2 text-[11px] text-slate-400 font-medium">
-            Seluruh berkas pendaftaran tercatat
+          <p className="mt-2 text-xs text-slate-300">
+            {activeScheduled} terjadwal aktif • {countBatal} batal
           </p>
         </div>
 
-        <div className="liquid-neumorph-card p-5 relative overflow-hidden group border-t border-l border-white/20 hover:-translate-y-0.5 transition-transform">
+        <div className="liquid-neumorph-card p-5 sm:p-6 rounded-3xl relative overflow-hidden group border-t border-l border-white/20 shadow-xl hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-emerald-300 uppercase tracking-wider">
-              Terkonfirmasi
+            <span className="text-xs font-semibold text-emerald-300 uppercase tracking-wider">
+              Jadwal Terkonfirmasi
             </span>
-            <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-emerald-500/10 border-t border-emerald-400/25 flex items-center justify-center text-emerald-400">
-              <CheckCircle2 className="w-4 h-4" />
+            <div className="liquid-neumorph-pill w-10 h-10 rounded-2xl bg-emerald-500/15 border-t border-emerald-400/30 flex items-center justify-center text-emerald-300">
+              <CheckCircle2 className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-semibold text-emerald-300 tracking-tight">{countConfirmed}</span>
-            <span className="text-xs text-emerald-400/70 font-medium">
-              {total > 0 ? Math.round((countConfirmed / total) * 100) : 0}%
+            <span className="text-3xl sm:text-4xl font-bold text-emerald-300 tracking-tight font-mono">
+              {countConfirmed}
+            </span>
+            <span className="text-xs text-emerald-300/90 font-semibold">
+              ({total > 0 ? Math.round((countConfirmed / total) * 100) : 0}%)
             </span>
           </div>
-          <p className="mt-2 text-[11px] text-slate-400 font-medium">
-            Slot jadwal siap di bilik konseling
+          <p className="mt-2 text-xs text-slate-300">
+            Slot jadwal konseling siap dilayani psikolog
           </p>
         </div>
 
-        <div className="liquid-neumorph-card p-5 relative overflow-hidden group border-t border-l border-white/20 hover:-translate-y-0.5 transition-transform">
+        <div className="liquid-neumorph-card p-5 sm:p-6 rounded-3xl relative overflow-hidden group border-t border-l border-white/20 shadow-xl hover:-translate-y-0.5 transition-all">
           <div className="flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-sky-300 uppercase tracking-wider">
-              Hadir & Selesai
+            <span className="text-xs font-semibold text-brand-gold uppercase tracking-wider">
+              Hadir & Selesai Sesi
             </span>
-            <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-sky-500/10 border-t border-sky-400/25 flex items-center justify-center text-sky-400">
-              <Clock className="w-4 h-4" />
+            <div className="liquid-neumorph-pill w-10 h-10 rounded-2xl bg-amber-500/15 border-t border-amber-400/30 flex items-center justify-center text-brand-gold">
+              <Clock className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-semibold text-sky-300 tracking-tight">{countHadir}</span>
-            <span className="text-xs text-sky-400/70 font-medium">
-              {total > 0 ? Math.round((countHadir / total) * 100) : 0}%
+            <span className="text-3xl sm:text-4xl font-bold text-brand-gold tracking-tight font-mono">
+              {countHadir}
+            </span>
+            <span className="text-xs text-amber-300/90 font-semibold">
+              ({total > 0 ? Math.round((countHadir / total) * 100) : 0}%)
             </span>
           </div>
-          <p className="mt-2 text-[11px] text-slate-400 font-medium">
-            Peserta di bilik atau telah tuntas
+          <p className="mt-2 text-xs text-slate-300">
+            Peserta hadir di lokasi atau telah tuntas konseling
           </p>
         </div>
 
         {ENABLE_TKT_WAITING_LIST && (
-          <div className="liquid-neumorph-card p-5 relative overflow-hidden group border-t border-l border-white/20 hover:-translate-y-0.5 transition-transform">
+          <div className="liquid-neumorph-card p-5 sm:p-6 rounded-3xl relative overflow-hidden group border-t border-l border-white/20 shadow-xl hover:-translate-y-0.5 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-semibold text-brand-gold uppercase tracking-wider">
+              <span className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
                 Waiting List
               </span>
-              <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-amber-500/10 border-t border-amber-400/25 flex items-center justify-center text-brand-gold">
-                <AlertCircle className="w-4 h-4" />
+              <div className="liquid-neumorph-pill w-10 h-10 rounded-2xl bg-amber-500/15 border-t border-amber-400/30 flex items-center justify-center text-brand-gold">
+                <AlertCircle className="w-5 h-5" />
               </div>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-semibold text-brand-gold tracking-tight">{countWaiting}</span>
-              <span className="text-xs text-amber-400/70 font-medium">
-                {total > 0 ? Math.round((countWaiting / total) * 100) : 0}%
+              <span className="text-3xl sm:text-4xl font-bold text-brand-gold tracking-tight font-mono">
+                {countWaiting}
+              </span>
+              <span className="text-xs text-amber-300/90 font-semibold">
+                ({total > 0 ? Math.round((countWaiting / total) * 100) : 0}%)
               </span>
             </div>
-            <p className="mt-2 text-[11px] text-slate-400 font-medium">
-              Antrean siap alokasi bila ada pembatalan
+            <p className="mt-2 text-xs text-slate-300">
+              Antrean cadangan siap alokasi bila slot kosong
             </p>
           </div>
         )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="liquid-neumorph-card p-6 flex flex-col justify-between border-t border-l border-white/20">
+        <div className="liquid-neumorph-card p-6 rounded-3xl flex flex-col justify-between border-t border-l border-white/20 shadow-xl">
           <div>
-            <div className="flex items-center gap-2 mb-4">
-              <GraduationCap className="w-5 h-5 text-brand-gold" />
-              <h2 className="text-base font-semibold text-white">Demografi Kampus</h2>
-            </div>
-            <p className="text-xs text-slate-300 mb-6">
-              Perbandingan pendaftar asal Institut Teknologi Bandung dengan kampus mitra lainnya.
-            </p>
-
-            <div className="space-y-5">
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="liquid-neumorph-pill w-9 h-9 rounded-xl bg-amber-500/15 border-t border-amber-400/30 flex items-center justify-center text-brand-gold shrink-0">
+                <GraduationCap className="w-4 h-4" />
+              </div>
               <div>
-                <div className="flex justify-between items-center text-xs font-semibold mb-2">
+                <h2 className="text-sm sm:text-base font-bold text-white">
+                  Demografi Kampus & Member
+                </h2>
+                <p className="text-[11px] text-slate-300">
+                  Komposisi asal perguruan tinggi & keanggotaan ITB CC
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4 mt-5">
+              <div>
+                <div className="flex justify-between items-center text-xs font-semibold mb-1.5">
                   <span className="text-slate-200">Mahasiswa & Alumni ITB</span>
-                  <span className="text-brand-gold">{countITB} ({pctITB}%)</span>
+                  <span className="text-brand-gold font-mono">
+                    {countITB} ({pctITB}%)
+                  </span>
                 </div>
-                <div className="liquid-neumorph-inset w-full h-2.5 rounded-full p-0.5 border border-white/5">
+                <div className="liquid-neumorph-inset w-full h-2.5 rounded-full p-0.5 border border-white/10">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-500"
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-300 transition-all duration-300"
                     style={{ width: `${pctITB}%` }}
                   />
                 </div>
               </div>
 
               <div>
-                <div className="flex justify-between items-center text-xs font-semibold mb-2">
-                  <span className="text-slate-200">Universitas Lainnya</span>
-                  <span className="text-sky-300">{countNonITB} ({pctNonITB}%)</span>
+                <div className="flex justify-between items-center text-xs font-semibold mb-1.5">
+                  <span className="text-slate-200">Kampus Mitra / Umum Non-ITB</span>
+                  <span className="text-sky-300 font-mono">
+                    {countNonITB} ({pctNonITB}%)
+                  </span>
                 </div>
-                <div className="liquid-neumorph-inset w-full h-2.5 rounded-full p-0.5 border border-white/5">
+                <div className="liquid-neumorph-inset w-full h-2.5 rounded-full p-0.5 border border-white/10">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-sky-500 to-sky-300 transition-all duration-500"
+                    className="h-full rounded-full bg-gradient-to-r from-sky-500 to-sky-300 transition-all duration-300"
                     style={{ width: `${pctNonITB}%` }}
                   />
                 </div>
               </div>
             </div>
+
+            <div className="mt-5 pt-4 border-t border-white/10 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                  <Award className="w-3.5 h-3.5 text-brand-gold" />
+                  Kategori Status Peserta
+                </span>
+              </div>
+              {statusMhsCategories.map((cat) => (
+                <div key={cat.label} className="space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-200">{cat.label}</span>
+                    <span className="font-mono text-slate-300 font-semibold">
+                      {cat.count} ({cat.pct}%)
+                    </span>
+                  </div>
+                  <div className="liquid-neumorph-inset w-full h-1.5 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${cat.color} transition-all duration-300`}
+                      style={{ width: `${cat.pct}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-8 pt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Rasio ITB : Non-ITB</span>
-            <span className="font-mono text-white font-semibold">
-              {pctITB}% : {pctNonITB}%
+          <div className="mt-6 pt-4 border-t border-white/10 flex items-center justify-between text-xs">
+            <span className="text-slate-300 font-medium">Terdaftar Member ITB CC</span>
+            <span className="px-2.5 py-1 rounded-lg liquid-neumorph-inset border border-amber-400/30 font-mono text-brand-gold font-bold">
+              {countMemberItbCc} Peserta ({pctMemberItbCc}%)
             </span>
           </div>
         </div>
 
-        <div className="liquid-neumorph-card p-6 lg:col-span-2 border-t border-l border-white/20">
-          <div className="flex items-center gap-2 mb-4">
-            <BarChart3 className="w-5 h-5 text-sky-400" />
-            <h2 className="text-base font-semibold text-white">Distribusi Status Peserta</h2>
-          </div>
-          <p className="text-xs text-slate-300 mb-6">
-            Rincian tahapan operasional dari seluruh berkas yang tercatat dalam sistem.
-          </p>
+        <div className="liquid-neumorph-card p-6 rounded-3xl lg:col-span-2 border-t border-l border-white/20 shadow-xl flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-2.5 mb-2">
+              <div className="liquid-neumorph-pill w-9 h-9 rounded-xl bg-sky-500/15 border-t border-sky-400/30 flex items-center justify-center text-sky-300 shrink-0">
+                <BarChart3 className="w-4 h-4" />
+              </div>
+              <div>
+                <h2 className="text-sm sm:text-base font-bold text-white">
+                  Distribusi Status Kehadiran & Tahapan Operasional
+                </h2>
+                <p className="text-[11px] text-slate-300">
+                  Proporsi real-time perkembangan jadwal peserta dari pendaftaran hingga selesai konseling
+                </p>
+              </div>
+            </div>
 
-          <div className="space-y-4">
-            {statusBreakdown.map((item) => {
-              const pct = total > 0 ? Math.round((item.count / total) * 100) : 0
-              return (
-                <div key={item.label}>
-                  <div className="flex justify-between items-center text-xs mb-1.5">
-                    <span className="text-slate-200 font-medium">{item.label}</span>
-                    <span className="font-mono text-slate-300">
-                      {item.count} <span className="text-slate-500 text-[10px]">({pct}%)</span>
+            <div className="space-y-4 mt-5">
+              {statusBreakdown.map((item) => {
+                const pct = total > 0 ? Math.round((item.count / total) * 100) : 0
+                return (
+                  <div key={item.label} className="liquid-neumorph-inset p-3.5 rounded-2xl border border-white/10">
+                    <div className="flex justify-between items-center text-xs mb-2">
+                      <span className="text-slate-100 font-semibold">{item.label}</span>
+                      <span className="font-mono text-white font-bold">
+                        {item.count}{" "}
+                        <span className="text-slate-300 text-[11px] font-normal">({pct}%)</span>
+                      </span>
+                    </div>
+                    <div className="w-full h-2 rounded-full bg-slate-900/80 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${item.color} transition-all duration-300`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
+            <span>Tingkat Keterisian Slot Konseling</span>
+            <span className="font-mono text-brand-gold font-bold">
+              {activeScheduled} Terjadwal dari {totalCapacitySlots} Kapasitas Slot ({occupancyPct}%)
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="liquid-neumorph-card p-6 rounded-3xl border-t border-l border-white/20 shadow-xl">
+        <div className="flex items-center gap-2.5 mb-2">
+          <div className="liquid-neumorph-pill w-9 h-9 rounded-xl bg-amber-500/15 border-t border-amber-400/30 flex items-center justify-center text-brand-gold shrink-0">
+            <Target className="w-4 h-4" />
+          </div>
+          <div>
+            <h2 className="text-sm sm:text-base font-bold text-white">
+              Distribusi Harapan & Kebutuhan Sesi Konseling
+            </h2>
+            <p className="text-[11px] text-slate-300">
+              Topik kebutuhan utama yang dipilih peserta saat pengisian formulir pendaftaran konseling
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mt-5">
+          {harapanBreakdown.map((item) => {
+            const Icon = item.icon
+            return (
+              <div
+                key={item.key}
+                className="liquid-neumorph-inset p-4 rounded-2xl border border-white/10 flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <div
+                      className={`liquid-neumorph-pill w-9 h-9 rounded-xl border-t flex items-center justify-center shrink-0 ${item.pillClass}`}
+                    >
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <span className={`text-lg font-bold font-mono ${item.accentText}`}>
+                      {item.pct}%
                     </span>
                   </div>
-                  <div className="liquid-neumorph-inset w-full h-2 rounded-full p-0.5 border border-white/5">
+                  <h3 className="text-xs sm:text-sm font-bold text-white leading-snug">
+                    {item.title}
+                  </h3>
+                  <p className="text-[11px] text-slate-300 mt-1 leading-relaxed">
+                    {item.subtitle}
+                  </p>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-white/10">
+                  <div className="flex justify-between text-xs mb-1.5">
+                    <span className="text-slate-300 font-medium">Jumlah Peminat</span>
+                    <span className="font-mono font-bold text-white">{item.count} peserta</span>
+                  </div>
+                  <div className="w-full h-2 rounded-full bg-slate-900/90 overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${item.color} transition-all duration-500`}
-                      style={{ width: `${pct}%` }}
+                      className={`h-full rounded-full ${item.accentBar} transition-all duration-300`}
+                      style={{ width: `${item.pct}%` }}
                     />
                   </div>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )
+          })}
         </div>
       </div>
 
-      <div className="liquid-neumorph-card p-6 border-t border-l border-white/20">
-        <div className="flex items-center gap-2 mb-4">
-          <Target className="w-5 h-5 text-brand-gold" />
-          <h2 className="text-base font-semibold text-white">Harapan dan Kebutuhan Sesi</h2>
-        </div>
-        <p className="text-xs text-slate-300 mb-6">
-          Kebutuhan utama yang dipilih peserta saat pendaftaran formulir konseling.
-        </p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="liquid-neumorph-inset p-4 rounded-xl border border-white/10">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-amber-500/10 border-t border-amber-400/25 flex items-center justify-center text-brand-gold">
-                <FileText className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-semibold text-white">CV Review</h3>
-                <p className="text-[11px] text-slate-400">Ulasan resume & portofolio</p>
-              </div>
+      {psikologWorkload.length > 0 && (
+        <div className="liquid-neumorph-card p-6 rounded-3xl border-t border-l border-white/20 shadow-xl">
+          <div className="flex items-center gap-2.5 mb-2">
+            <div className="liquid-neumorph-pill w-9 h-9 rounded-xl bg-emerald-500/15 border-t border-emerald-400/30 flex items-center justify-center text-emerald-300 shrink-0">
+              <UserCheck className="w-4 h-4" />
             </div>
-            <div className="flex justify-between text-xs mb-2">
-              <span className="text-slate-300">{countCV} peserta</span>
-              <span className="font-semibold text-brand-gold">{pctCV}%</span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div className="h-full rounded-full bg-amber-400" style={{ width: `${pctCV}%` }} />
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-white">
+                Distribusi Beban Sesi per Psikolog Bertugas
+              </h2>
+              <p className="text-[11px] text-slate-300">
+                Jumlah sesi terjadwal aktif dan realisasi kehadiran peserta untuk setiap psikolog bertugas
+              </p>
             </div>
           </div>
 
-          <div className="liquid-neumorph-inset p-4 rounded-xl border border-white/10">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-sky-500/10 border-t border-sky-400/25 flex items-center justify-center text-sky-400">
-                <Compass className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-semibold text-white">Konsultasi Karier</h3>
-                <p className="text-[11px] text-slate-400">Arah minat & eksplorasi kerja</p>
-              </div>
-            </div>
-            <div className="flex justify-between text-xs mb-2">
-              <span className="text-slate-300">{countKarier} peserta</span>
-              <span className="font-semibold text-sky-300">{pctKarier}%</span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div className="h-full rounded-full bg-sky-400" style={{ width: `${pctKarier}%` }} />
-            </div>
-          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-5">
+            {psikologWorkload.map((psi, idx) => (
+              <div
+                key={psi.name}
+                className="liquid-neumorph-inset p-4 rounded-2xl border border-white/10 space-y-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-7 h-7 rounded-xl bg-brand-gold/15 border border-brand-gold/30 flex items-center justify-center text-brand-gold font-bold text-xs font-mono shrink-0">
+                      {idx + 1}
+                    </div>
+                    <h3 className="text-xs sm:text-sm font-bold text-white truncate" title={psi.name}>
+                      {psi.name}
+                    </h3>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono font-bold text-brand-gold shrink-0">
+                    {psi.count} / {psi.maxSesi} Sesi
+                  </span>
+                </div>
 
-          <div className="liquid-neumorph-inset p-4 rounded-xl border border-white/10">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="liquid-neumorph-pill w-8 h-8 rounded-lg bg-white/10 border-t border-white/25 flex items-center justify-center text-white">
-                <Layers className="w-4 h-4" />
+                <div className="w-full h-2 rounded-full bg-slate-900/90 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400 transition-all duration-300"
+                    style={{ width: `${psi.pct}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[11px] text-slate-300">
+                  <span>Hadir / Selesai: <strong className="text-emerald-300 font-mono">{psi.selesaiCount}</strong></span>
+                  <span className="font-mono text-slate-300">{psi.pct}% Terisi</span>
+                </div>
               </div>
-              <div>
-                <h3 className="text-xs font-semibold text-white">Keduanya</h3>
-                <p className="text-[11px] text-slate-400">Review CV & konsultasi menyeluruh</p>
-              </div>
-            </div>
-            <div className="flex justify-between text-xs mb-2">
-              <span className="text-slate-300">{countKeduanya} peserta</span>
-              <span className="font-semibold text-white">{pctKeduanya}%</span>
-            </div>
-            <div className="w-full h-2 rounded-full bg-slate-800 overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-sky-400 to-amber-300" style={{ width: `${pctKeduanya}%` }} />
-            </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

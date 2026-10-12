@@ -79,6 +79,46 @@ const INFO_SUMBER_OPTIONS = [
 const DURASI_OPTIONS = ["Terlalu Pendek", "Cukup", "Terlalu Lama"]
 const RENCANA_OPTIONS = ["Ya", "Tidak", "Mungkin"]
 
+const sanitizeParticipantEmail = (rawEmail) => {
+  const trimmed = String(rawEmail || "").trim()
+  return trimmed === "-" ? "" : trimmed
+}
+
+const getParticipantStatusBadge = (status) => {
+  switch (status) {
+    case "SELESAI_FULL":
+      return {
+        label: "Selesai Konseling",
+        cls: "bg-blue-500/15 text-blue-300 border-blue-400/30"
+      }
+    case "HADIR":
+      return {
+        label: "Hadir di Lokasi",
+        cls: "bg-amber-500/15 text-amber-300 border-amber-400/30"
+      }
+    case "CONFIRMED":
+      return {
+        label: "Terkonfirmasi",
+        cls: "bg-emerald-500/15 text-emerald-300 border-emerald-400/30"
+      }
+    case "DAPAT_SESI":
+      return {
+        label: "Dapat Sesi",
+        cls: "bg-sky-500/15 text-sky-300 border-sky-400/30"
+      }
+    case "WAITING_LIST":
+      return {
+        label: "Waiting List",
+        cls: "bg-orange-500/15 text-orange-300 border-orange-400/30"
+      }
+    default:
+      return {
+        label: status || "Terdaftar",
+        cls: "bg-slate-500/15 text-slate-300 border-slate-400/30"
+      }
+  }
+}
+
 export default function TktFeedbackPage() {
   const { id: routePesertaId } = useParams()
   const [submitted, setSubmitted] = useState(false)
@@ -137,20 +177,21 @@ export default function TktFeedbackPage() {
 
         if (cfg) {
           const info = getActiveEventInfo(cfg)
-          if (info && info.nama_kegiatan) {
-            setActiveEventName(info.nama_kegiatan)
+          if (info && (info.nama || info.nama_kegiatan)) {
+            setActiveEventName(info.nama || info.nama_kegiatan)
           }
         }
 
         if (routePesertaId) {
-          if (pesertaData) {
+          if (pesertaData && pesertaData.status_peserta !== "BATAL") {
             const displayWa = formatWhatsAppDisplay(pesertaData.nomor_wa || "")
+            const cleanEmail = sanitizeParticipantEmail(pesertaData.email)
             setFormData((prev) => ({
               ...prev,
               peserta_id: pesertaData.id || "",
               nomor_wa_pengisi: displayWa,
               nama_pengisi: pesertaData.nama_lengkap || "",
-              email_pengisi: pesertaData.email || ""
+              email_pengisi: cleanEmail
             }))
             setMatchedParticipant(pesertaData)
             setIsPersonalLocked(true)
@@ -208,18 +249,19 @@ export default function TktFeedbackPage() {
     if (!waCheck.isValid) {
       setWaLookupStatus("idle")
       setMatchedParticipant(null)
-      return
+      return null
     }
 
     setWaLookupStatus("loading")
     const res = await getPesertaForFeedbackByWhatsApp(sanitizedWa)
     if (res.found && res.participant) {
+      const cleanEmail = sanitizeParticipantEmail(res.participant.email)
       setMatchedParticipant(res.participant)
       setFormData((prev) => ({
         ...prev,
         peserta_id: res.participant.id || "",
         nama_pengisi: res.participant.nama_lengkap || prev.nama_pengisi,
-        email_pengisi: res.participant.email || prev.email_pengisi
+        email_pengisi: cleanEmail || sanitizeParticipantEmail(prev.email_pengisi)
       }))
       setErrors((prev) => ({
         ...prev,
@@ -232,6 +274,7 @@ export default function TktFeedbackPage() {
       } else {
         setWaLookupStatus("found")
       }
+      return res.participant
     } else {
       setMatchedParticipant(null)
       setFormData((prev) => ({
@@ -241,6 +284,7 @@ export default function TktFeedbackPage() {
         email_pengisi: ""
       }))
       setWaLookupStatus("not_found")
+      return null
     }
   }
 
@@ -310,47 +354,49 @@ export default function TktFeedbackPage() {
     }
   }
 
-  const validateAllFields = () => {
+  const validateAllFields = (overrideData = null) => {
+    const targetData = overrideData || formData
     const newErrors = {}
 
     if (!isPersonalLocked) {
-      const waCheck = validateWhatsApp(formData.nomor_wa_pengisi)
+      const waCheck = validateWhatsApp(targetData.nomor_wa_pengisi)
       if (!waCheck.isValid) {
         newErrors.nomor_wa_pengisi = waCheck.error
       }
 
-      const nameCheck = validateFullName(formData.nama_pengisi)
+      const nameCheck = validateFullName(targetData.nama_pengisi)
       if (!nameCheck.isValid) {
         newErrors.nama_pengisi = nameCheck.error
       }
 
-      const emailCheck = validateEmail(formData.email_pengisi, false)
+      const cleanedEmail = sanitizeParticipantEmail(targetData.email_pengisi)
+      const emailCheck = validateEmail(cleanedEmail, false)
       if (!emailCheck.isValid) {
         newErrors.email_pengisi = emailCheck.error
       }
     }
 
     RATING_QUESTIONS.forEach((q) => {
-      const val = Number(formData[q.name]) || 0
+      const val = Number(targetData[q.name]) || 0
       if (val < 1 || val > 5) {
         newErrors[q.name] = "Pertanyaan penilaian ini wajib diisi (pilih 1 sampai 5 bintang)."
       }
     })
 
-    if (!formData.info_sumber) {
+    if (!targetData.info_sumber) {
       newErrors.info_sumber = "Pilih sumber informasi terlebih dahulu."
     } else if (
-      formData.info_sumber === "Yang lain" &&
-      !String(formData.info_sumber_lain || "").trim()
+      targetData.info_sumber === "Yang lain" &&
+      !String(targetData.info_sumber_lain || "").trim()
     ) {
       newErrors.info_sumber_lain = "Mohon sebutkan sumber informasi lainnya."
     }
 
-    if (!formData.durasi_sesi) {
+    if (!targetData.durasi_sesi) {
       newErrors.durasi_sesi = "Pertanyaan durasi sesi wajib dipilih."
     }
 
-    if (!formData.rencana_ikut_lagi) {
+    if (!targetData.rencana_ikut_lagi) {
       newErrors.rencana_ikut_lagi = "Pertanyaan rencana mengikuti acara serupa wajib dipilih."
     }
 
@@ -358,11 +404,37 @@ export default function TktFeedbackPage() {
     return Object.keys(newErrors).length === 0
   }
 
-  const handleInitialSubmit = (e) => {
+  const handleInitialSubmit = async (e) => {
     e.preventDefault()
     setErrorMessage("")
 
-    if (!validateAllFields()) {
+    if (waLookupTimerRef.current) {
+      clearTimeout(waLookupTimerRef.current)
+    }
+
+    let dataToValidate = {
+      ...formData,
+      email_pengisi: sanitizeParticipantEmail(formData.email_pengisi)
+    }
+
+    if (!isPersonalLocked) {
+      const cleanedWa = sanitizeWhatsAppInput(formData.nomor_wa_pengisi)
+      const waCheck = validateWhatsApp(cleanedWa)
+      if (waCheck.isValid && (!formData.peserta_id || !String(formData.nama_pengisi || "").trim())) {
+        const resolvedParticipant = await triggerWhatsAppAutoFill(cleanedWa)
+        if (resolvedParticipant) {
+          const cleanResolvedEmail = sanitizeParticipantEmail(resolvedParticipant.email)
+          dataToValidate = {
+            ...dataToValidate,
+            peserta_id: resolvedParticipant.id || "",
+            nama_pengisi: resolvedParticipant.nama_lengkap || dataToValidate.nama_pengisi,
+            email_pengisi: cleanResolvedEmail || dataToValidate.email_pengisi
+          }
+        }
+      }
+    }
+
+    if (!validateAllFields(dataToValidate)) {
       setErrorMessage("Mohon perbaiki isian Anda pada bagian yang ditandai merah.")
       window.scrollTo({ top: 0, behavior: "smooth" })
       return
@@ -376,14 +448,15 @@ export default function TktFeedbackPage() {
     setErrorMessage("")
     try {
       const nameCheck = validateFullName(formData.nama_pengisi)
-      const emailCheck = validateEmail(formData.email_pengisi, false)
+      const cleanedEmail = sanitizeParticipantEmail(formData.email_pengisi)
+      const emailCheck = validateEmail(cleanedEmail, false)
       const waCheck = validateWhatsApp(formData.nomor_wa_pengisi)
 
       const payload = {
         ...formData,
         peserta_id: formData.peserta_id || (isPersonalLocked ? routePesertaId : ""),
         nama_pengisi: nameCheck.cleanValue || String(formData.nama_pengisi || "").trim(),
-        email_pengisi: emailCheck.cleanValue || String(formData.email_pengisi || "").trim(),
+        email_pengisi: emailCheck.cleanValue || cleanedEmail,
         nomor_wa_pengisi: waCheck.cleanValue || sanitizeWhatsAppInput(formData.nomor_wa_pengisi)
       }
 
@@ -426,7 +499,7 @@ export default function TktFeedbackPage() {
     )
   }
 
-  if (submitted || alreadySubmittedOnLoad) {
+  if (submitted) {
     return (
       <div className="min-h-[85vh] flex items-center justify-center px-4 py-16">
         <div className="w-full max-w-xl rounded-3xl p-8 sm:p-10 liquid-neumorph-card border-t border-l border-white/20 shadow-2xl text-center animate-in fade-in duration-200">
@@ -435,24 +508,14 @@ export default function TktFeedbackPage() {
           </div>
 
           <h2 className="text-2xl sm:text-3xl font-semibold text-white tracking-tight">
-            {alreadySubmittedOnLoad && !submitted ? "Feedback Sudah Tercatat" : "Terima Kasih!"}
+            Terima Kasih!
           </h2>
 
           <p className="mt-3 text-sm text-slate-300 max-w-md mx-auto leading-relaxed">
-            {alreadySubmittedOnLoad && !submitted ? (
-              <>
-                Halo <strong className="text-white font-semibold">{formData.nama_pengisi}</strong>, Anda
-                sudah pernah mengirimkan evaluasi untuk sesi konseling karier ini. Terima kasih atas
-                partisipasi dan masukan berharga Anda.
-              </>
-            ) : (
-              <>
-                Feedback Anda telah berhasil kami terima,{" "}
-                <strong className="text-white font-semibold">{formData.nama_pengisi}</strong>. Kontribusi
-                dan masukan Anda sangat berarti bagi peningkatan kualitas layanan konseling karier ITB
-                Career Center.
-              </>
-            )}
+            Feedback Anda telah berhasil kami terima,{" "}
+            <strong className="text-white font-semibold">{formData.nama_pengisi}</strong>. Kontribusi
+            dan masukan Anda sangat berarti bagi peningkatan kualitas layanan konseling karier ITB
+            Career Center.
           </p>
 
           {submittedParticipant && (
@@ -493,6 +556,10 @@ export default function TktFeedbackPage() {
       </div>
     )
   }
+
+  const participantBadge = matchedParticipant
+    ? getParticipantStatusBadge(matchedParticipant.status_peserta)
+    : null
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
@@ -541,6 +608,18 @@ export default function TktFeedbackPage() {
               <div className="space-y-0.5">
                 <p className="font-semibold text-rose-300">Pengiriman Feedback Belum Berhasil</p>
                 <p className="text-rose-200/90 leading-relaxed">{errorMessage}</p>
+              </div>
+            </div>
+          )}
+
+          {alreadySubmittedOnLoad && (
+            <div className="mb-6 p-4 rounded-2xl bg-sky-500/15 border border-sky-500/35 text-sky-200 text-xs sm:text-sm flex items-start gap-3">
+              <CheckCircle2 className="w-5 h-5 shrink-0 text-sky-400 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-semibold text-sky-300">Evaluasi Sebelumnya Sudah Tercatat</p>
+                <p className="text-sky-200/90 leading-relaxed">
+                  Halo <strong className="text-white">{formData.nama_pengisi}</strong>, Anda sudah pernah mengirimkan evaluasi untuk sesi ini. Anda tetap dapat mengisi formulir di bawah ini jika ingin memperbarui penilaian Anda.
+                </p>
               </div>
             </div>
           )}
@@ -595,9 +674,18 @@ export default function TktFeedbackPage() {
                         : "-"}
                     </span>
                   </div>
-                  <span className="text-slate-300 font-medium">
-                    Psikolog: <strong className="text-white">{matchedParticipant.psikolog_bertugas || "-"}</strong>
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-slate-300 font-medium">
+                      Psikolog: <strong className="text-white">{matchedParticipant.psikolog_bertugas || "-"}</strong>
+                    </span>
+                    {participantBadge && (
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${participantBadge.cls}`}
+                      >
+                        {participantBadge.label}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -644,9 +732,9 @@ export default function TktFeedbackPage() {
                     </p>
                   )}
                   {!isPersonalLocked && !errors.nomor_wa_pengisi && waLookupStatus === "already_submitted" && (
-                    <p className="mt-1.5 text-xs text-amber-400 flex items-center gap-1.5 font-medium">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                      <span>Nomor WhatsApp ini tercatat sudah pernah mengisi feedback sebelumnya.</span>
+                    <p className="mt-1.5 text-xs text-sky-400 flex items-center gap-1.5 font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                      <span>Data peserta ditemukan — Pengiriman kembali akan memperbarui evaluasi Anda.</span>
                     </p>
                   )}
                   {!isPersonalLocked && !errors.nomor_wa_pengisi && waLookupStatus === "not_found" && (
@@ -1052,7 +1140,7 @@ export default function TktFeedbackPage() {
               <div className="flex justify-between py-1 border-b border-white/10 gap-2">
                 <span className="text-slate-400 shrink-0">Email:</span>
                 <span className="font-semibold text-slate-200 text-right truncate">
-                  {formData.email_pengisi}
+                  {formData.email_pengisi || "-"}
                 </span>
               </div>
               <div className="flex justify-between py-1 border-b border-white/10 gap-2">

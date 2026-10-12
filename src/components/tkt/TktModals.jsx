@@ -62,7 +62,7 @@ export function TktDetailModal({ isOpen, onClose, participant, getWaLink, onEdit
         }
       case "SELESAI_FULL":
         return {
-          label: "Selesai & Feedback",
+          label: "Selesai Konseling",
           cls: "bg-blue-500/15 text-blue-300 border-blue-400/30"
         }
       case "DAPAT_SESI":
@@ -998,7 +998,7 @@ export function TktEditModal({ isOpen, onClose, onSave, participant, dates, psik
       setFormData({
         id: participant.id,
         nama_lengkap: participant.nama_lengkap || "",
-        email: participant.email || "",
+        email: participant.email === "-" ? "" : participant.email || "",
         nomor_wa: formatWhatsAppDisplay(participant.nomor_wa || ""),
         status_mhs: rawStatusMhs,
         asal_univ_select: asalUnivSelect,
@@ -1067,7 +1067,7 @@ export function TktEditModal({ isOpen, onClose, onSave, participant, dates, psik
       newErrors.nama_lengkap = nameResult.error
     }
 
-    const emailResult = validateEmail(formData.email, true)
+    const emailResult = validateEmail(formData.email, false)
     if (!emailResult.isValid) {
       newErrors.email = emailResult.error
     }
@@ -1124,7 +1124,7 @@ export function TktEditModal({ isOpen, onClose, onSave, participant, dates, psik
 
     setPendingConfirm({
       nama_lengkap: nameResult.cleanValue,
-      email: formData.email.trim().toLowerCase(),
+      email: emailResult.cleanValue || "-",
       nomor_wa: phoneResult.cleanValue,
       status_mhs: formData.status_mhs,
       asal_univ: finalAsalUniv,
@@ -1268,7 +1268,7 @@ export function TktEditModal({ isOpen, onClose, onSave, participant, dates, psik
                   <option value="DAPAT_SESI" className="bg-[#0b1a27] text-sky-300">DAPAT SESI</option>
                   <option value="CONFIRMED" className="bg-[#0b1a27] text-emerald-300">CONFIRMED (Terkonfirmasi)</option>
                   <option value="HADIR" className="bg-[#0b1a27] text-amber-300">HADIR (Di Booth)</option>
-                  <option value="SELESAI_FULL" className="bg-[#0b1a27] text-blue-300">SELESAI FULL (Selesai & Feedback)</option>
+                  <option value="SELESAI_FULL" className="bg-[#0b1a27] text-blue-300">SELESAI (Selesai Konseling)</option>
                   {ENABLE_TKT_WAITING_LIST && (
                     <option value="WAITING_LIST" className="bg-[#0b1a27] text-orange-300">WAITING LIST</option>
                   )}
@@ -1303,7 +1303,7 @@ export function TktEditModal({ isOpen, onClose, onSave, participant, dates, psik
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs sm:text-sm font-semibold text-slate-200 mb-1.5">
-                Email <span className="text-amber-400 ml-0.5">*</span>
+                Email <span className="text-slate-400 font-normal text-xs">(Opsional)</span>
               </label>
               <input
                 type="email"
