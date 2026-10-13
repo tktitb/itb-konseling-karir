@@ -3,6 +3,21 @@ import { APP_CONFIG } from "../constants/config"
 const cache = new Map()
 const CACHE_TTL_MS = 60000
 
+const MONTH_INDEX_MAP = {
+  januari: 0,
+  februari: 1,
+  maret: 2,
+  april: 3,
+  mei: 4,
+  juni: 5,
+  juli: 6,
+  agustus: 7,
+  september: 8,
+  oktober: 9,
+  november: 10,
+  desember: 11
+}
+
 function parseGvizJSON(text) {
   const marker = "google.visualization.Query.setResponse("
   const start = text.indexOf(marker)
@@ -15,11 +30,14 @@ function parseGvizJSON(text) {
   return JSON.parse(jsonString)
 }
 
-function tableToRowsObjects(gvizJson) {
+function tableToRowsObjects(gvizJson, targetMonthIdx) {
   const rows = gvizJson?.table?.rows || []
-  return rows.map((r, index) => {
+  const result = []
+
+  for (let index = 0; index < rows.length; index++) {
+    const r = rows[index]
     const rawVal = r.c?.[0]?.v ?? ""
-    const fmtVal = r.c?.[0]?.f ?? ""
+    const fmtVal = (r.c?.[0]?.f ?? "").toString().trim()
     const psychologist = (r.c?.[1]?.v ?? "").toString().trim()
     const mode = (r.c?.[2]?.v ?? "").toString().trim()
     const category = (r.c?.[3]?.v ?? "").toString().trim()
@@ -27,7 +45,21 @@ function tableToRowsObjects(gvizJson) {
     const status = (r.c?.[5]?.v ?? "").toString().trim()
     const isAvailable = !participant || participant.length === 0
 
-    return {
+    if (psychologist !== "Bu Lina" && psychologist !== "Bu Sito") {
+      continue
+    }
+
+    if (typeof targetMonthIdx === "number" && targetMonthIdx >= 0 && fmtVal) {
+      const dateParts = fmtVal.split(" ")[0].split("/")
+      if (dateParts.length === 3) {
+        const rowMonth = parseInt(dateParts[1], 10) - 1
+        if (rowMonth !== targetMonthIdx) {
+          continue
+        }
+      }
+    }
+
+    result.push({
       id: `${index}-${fmtVal}-${psychologist}`,
       datetimeRaw: rawVal,
       datetimeFmt: fmtVal,
@@ -37,8 +69,10 @@ function tableToRowsObjects(gvizJson) {
       participant,
       status: isAvailable ? "Belum dimulai" : status || "Terpenuhi",
       isAvailable
-    }
-  })
+    })
+  }
+
+  return result
 }
 
 export async function fetchMonthlySchedule(sheetName, forceRefresh = false) {
@@ -75,20 +109,11 @@ export async function fetchMonthlySchedule(sheetName, forceRefresh = false) {
     const text = await response.text()
     const json = parseGvizJSON(text)
 
-    const actualSheetHeader = json.table?.cols?.[0]?.label || ""
-    if (
-      !text.toLowerCase().includes(cleanSheetName.toLowerCase()) &&
-      actualSheetHeader.toLowerCase().includes("januari") &&
-      cleanSheetName.toLowerCase() !== "januari"
-    ) {
-      cache.set(cacheKey, { timestamp: now, data: [] })
-      return []
-    }
-
-    const items = tableToRowsObjects(json)
+    const targetMonthIdx = MONTH_INDEX_MAP[cleanSheetName.toLowerCase()]
+    const items = tableToRowsObjects(json, targetMonthIdx)
     cache.set(cacheKey, { timestamp: now, data: items })
     return items
-  } catch (error) {
+  } catch {
     return []
   }
 }

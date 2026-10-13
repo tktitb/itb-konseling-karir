@@ -52,22 +52,16 @@ export default function RegulerSchedulePage() {
   })
 
   const linaSlots = filteredSlots.filter((slot) => {
-    const isLina =
-      slot.psychologist.toLowerCase().includes("lina") ||
-      slot.psychologist.toLowerCase().includes("bu lina")
-    if (!isLina) return false
-    if (selectedPsychologist !== "all" && !selectedPsychologist.toLowerCase().includes("lina")) {
+    if (slot.psychologist !== "Bu Lina") return false
+    if (selectedPsychologist !== "all" && selectedPsychologist !== "Bu Lina" && !selectedPsychologist.toLowerCase().includes("lina")) {
       return false
     }
     return true
   })
 
   const sitoSlots = filteredSlots.filter((slot) => {
-    const isSito =
-      slot.psychologist.toLowerCase().includes("sito") ||
-      slot.psychologist.toLowerCase().includes("bu sito")
-    if (!isSito) return false
-    if (selectedPsychologist !== "all" && !selectedPsychologist.toLowerCase().includes("sito")) {
+    if (slot.psychologist !== "Bu Sito") return false
+    if (selectedPsychologist !== "all" && selectedPsychologist !== "Bu Sito" && !selectedPsychologist.toLowerCase().includes("sito")) {
       return false
     }
     return true
