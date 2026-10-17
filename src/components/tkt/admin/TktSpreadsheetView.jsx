@@ -16,7 +16,8 @@ import {
   ArrowUp,
   SlidersHorizontal,
   Copy,
-  ArrowDownUp
+  ArrowDownUp,
+  Trash2
 } from "lucide-react"
 import {
   validateFullName,
@@ -34,6 +35,7 @@ import {
   getDefaultWaTemplateKey,
   checkWhatsAppRegistered
 } from "../../../services/tktService"
+import { TktDeleteModal } from "../TktModals"
 
 export default function TktSpreadsheetView({
   participants = [],
@@ -47,10 +49,11 @@ export default function TktSpreadsheetView({
   onOpenDetail,
   onOpenEdit,
   getWaLink,
-  onOpenWhatsApp
+  onOpenWhatsApp,
+  onDeleteParticipant
 }) {
   const DEFAULT_COLUMN_WIDTHS = {
-    aksi: 115,
+    aksi: 155,
     no: 55,
     nama_lengkap: 200,
     nomor_wa: 155,
@@ -109,6 +112,7 @@ export default function TktSpreadsheetView({
         return {
           ...DEFAULT_COLUMN_WIDTHS,
           ...parsed,
+          aksi: Math.max(parsed.aksi || 155, 155),
           jadwal_sesi: Math.max(parsed.jadwal_sesi || 185, 185)
         }
       }
@@ -252,6 +256,21 @@ export default function TktSpreadsheetView({
   const [newRowData, setNewRowData] = useState({})
   const [newRowErrors, setNewRowErrors] = useState({})
   const [isSavingNewRow, setIsSavingNewRow] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleConfirmDelete = async (id) => {
+    if (!onDeleteParticipant || isDeleting) return
+    setIsDeleting(true)
+    try {
+      const res = await onDeleteParticipant(id)
+      if (res && res.success) {
+        setDeleteTarget(null)
+      }
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   const sesiList = [
     "09.00-09.45",
@@ -2171,6 +2190,15 @@ export default function TktSpreadsheetView({
                           >
                             <WhatsAppIcon className="w-3.5 h-3.5 text-white" />
                           </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setDeleteTarget(p)}
+                            title="Hapus Data Peserta"
+                            className="w-7 h-7 rounded-lg bg-rose-500/15 hover:bg-rose-500/30 text-rose-300 hover:text-white flex items-center justify-center transition-all cursor-pointer border border-rose-400/30 hover:border-rose-400/60 shadow-sm active:scale-95"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
 
@@ -2229,6 +2257,18 @@ export default function TktSpreadsheetView({
           </div>
         </div>
       </div>
+
+      {deleteTarget && (
+        <TktDeleteModal
+          isOpen={Boolean(deleteTarget)}
+          participant={deleteTarget}
+          onClose={() => {
+            if (!isDeleting) setDeleteTarget(null)
+          }}
+          onConfirmDelete={handleConfirmDelete}
+          isDeleting={isDeleting}
+        />
+      )}
     </div>
   )
 }

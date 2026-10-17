@@ -554,6 +554,7 @@ export async function updatePeserta(id, updateFields) {
 
 export async function deletePeserta(id) {
   try {
+    await supabase.from("peserta_feedback").delete().eq("peserta_id", id)
     const { error } = await supabase
       .from("peserta_konseling")
       .delete()

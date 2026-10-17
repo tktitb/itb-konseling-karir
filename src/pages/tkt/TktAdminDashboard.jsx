@@ -28,7 +28,8 @@ import {
   formatWhatsAppMessage,
   subscribePesertaRealtime,
   getActiveEventDates,
-  getAllActivePsikologs
+  getAllActivePsikologs,
+  deletePeserta
 } from "../../services/tktService"
 import {
   verifyAdminSession,
@@ -190,6 +191,22 @@ export default function TktAdminDashboard() {
       )
     } catch {
       await loadAllData(true)
+    }
+  }
+
+  const handleDeleteParticipant = async (id) => {
+    try {
+      const res = await deletePeserta(id)
+      if (res && res.success) {
+        setParticipants((prev) => prev.filter((p) => p.id !== id))
+        return { success: true }
+      } else {
+        await loadAllData(true)
+        return res || { success: false, message: "Gagal menghapus data peserta" }
+      }
+    } catch (err) {
+      await loadAllData(true)
+      return { success: false, message: err?.message || "Gagal menghapus data peserta" }
     }
   }
 
@@ -581,6 +598,7 @@ export default function TktAdminDashboard() {
                 }}
                 getWaLink={getWaLink}
                 onOpenWhatsApp={handleOpenWhatsAppModal}
+                onDeleteParticipant={handleDeleteParticipant}
               />
             )}
 

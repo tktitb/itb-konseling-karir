@@ -1896,3 +1896,179 @@ export function TktWhatsAppModal({ isOpen, onClose, participant, config = {} }) 
     </div>
   )
 }
+
+export function TktDeleteModal({ isOpen, onClose, participant, onConfirmDelete, isDeleting }) {
+  if (!isOpen || !participant) return null
+
+  const hasActiveSchedule = Boolean(
+    participant.jadwal_hari &&
+    participant.jadwal_sesi &&
+    (participant.psikolog_bertugas || participant.psikolog_pilihan)
+  )
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case "CONFIRMED":
+        return {
+          label: "Confirmed (Siap)",
+          cls: "bg-emerald-500/15 text-emerald-300 border-emerald-400/30"
+        }
+      case "HADIR":
+        return {
+          label: "Hadir di Booth",
+          cls: "bg-amber-500/15 text-amber-300 border-amber-400/30"
+        }
+      case "SELESAI_FULL":
+        return {
+          label: "Selesai Konseling",
+          cls: "bg-blue-500/15 text-blue-300 border-blue-400/30"
+        }
+      case "DAPAT_SESI":
+        return {
+          label: "Dapat Sesi",
+          cls: "bg-sky-500/15 text-sky-300 border-sky-400/30"
+        }
+      case "WAITING_LIST":
+        return {
+          label: "Waiting List",
+          cls: "bg-orange-500/15 text-orange-300 border-orange-400/30"
+        }
+      case "BATAL":
+        return {
+          label: "Batal / Ditolak",
+          cls: "bg-rose-500/15 text-rose-300 border-rose-400/30"
+        }
+      default:
+        return {
+          label: status || "Belum Ditentukan",
+          cls: "bg-slate-500/15 text-slate-300 border-slate-400/30"
+        }
+    }
+  }
+
+  const badge = getStatusBadge(participant.status_peserta)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="relative w-full max-w-md p-6 rounded-3xl liquid-neumorph-card border border-rose-500/30 shadow-2xl animate-in zoom-in-95 duration-200 text-white">
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={isDeleting}
+          className="absolute top-5 right-5 w-8 h-8 rounded-full liquid-neumorph-inset flex items-center justify-center text-slate-400 hover:text-white transition-colors cursor-pointer border border-white/10 active:scale-95 disabled:opacity-50"
+          title="Tutup Modal"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="flex items-center gap-3.5 mb-5">
+          <div className="w-12 h-12 rounded-2xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0 shadow-lg shadow-rose-950/40">
+            <Trash2 className="w-6 h-6" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-white tracking-wide">
+              Konfirmasi Hapus Peserta
+            </h3>
+            <p className="text-xs text-rose-300/80">
+              Tindakan permanen dari menu Master Data
+            </p>
+          </div>
+        </div>
+
+        <div className="p-4 rounded-2xl liquid-neumorph-inset border border-white/10 bg-[#07131e]/80 space-y-3 mb-4">
+          <div>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Nama Peserta
+            </div>
+            <div className="text-sm font-bold text-white mt-0.5">
+              {participant.nama_lengkap || "-"}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+            <div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                WhatsApp
+              </div>
+              <div className="text-xs font-mono text-slate-200 mt-0.5">
+                {participant.nomor_wa || "-"}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Status
+              </div>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border mt-0.5 ${badge.cls}`}>
+                {badge.label}
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-white/10">
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              Alokasi Jadwal
+            </div>
+            <div className="text-xs text-slate-200 mt-0.5 font-medium">
+              {hasActiveSchedule ? (
+                <span>
+                  {participant.jadwal_hari} • {participant.jadwal_sesi} • {participant.psikolog_bertugas || participant.psikolog_pilihan}
+                </span>
+              ) : (
+                <span className="text-slate-400 italic">
+                  Belum dialokasikan jadwal (Waiting List)
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className={`p-3.5 rounded-2xl border text-xs leading-relaxed mb-6 flex items-start gap-2.5 ${
+          hasActiveSchedule
+            ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+            : "bg-rose-500/10 border-rose-500/30 text-rose-200"
+        }`}>
+          <AlertTriangle className={`w-4 h-4 shrink-0 mt-0.5 ${hasActiveSchedule ? "text-amber-400" : "text-rose-400"}`} />
+          <div className="space-y-1">
+            <span className="font-bold block">
+              {hasActiveSchedule ? "Dampak Pembebasan Slot Jadwal:" : "Peringatan Penghapusan:"}
+            </span>
+            <p className="text-[11px] leading-relaxed opacity-90">
+              {hasActiveSchedule
+                ? "Menghapus peserta ini akan otomatis mengosongkan dan membebaskan slot jadwal tersebut di Papan Jadwal dan Form Registrasi Publik."
+                : "Seluruh data registrasi dan feedback (jika ada) dari peserta ini akan dihapus permanen dari sistem."}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isDeleting}
+            className="liquid-neumorph-inset px-4 py-2.5 rounded-xl text-slate-300 hover:text-white font-semibold text-xs cursor-pointer transition-colors border border-white/10 active:scale-95 disabled:opacity-50"
+          >
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirmDelete(participant.id)}
+            disabled={isDeleting}
+            className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-lg shadow-rose-950/40 flex items-center gap-2 cursor-pointer transition-all border border-rose-400/40 active:scale-95 disabled:opacity-50"
+          >
+            {isDeleting ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Menghapus Data...</span>
+              </>
+            ) : (
+              <>
+                <Trash2 className="w-4 h-4" />
+                <span>Ya, Hapus Data</span>
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
