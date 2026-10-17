@@ -17,7 +17,10 @@ import {
   SlidersHorizontal,
   Copy,
   ArrowDownUp,
-  Trash2
+  Trash2,
+  CheckCircle2,
+  Clock,
+  Star
 } from "lucide-react"
 import {
   validateFullName,
@@ -66,6 +69,7 @@ export default function TktSpreadsheetView({
     jadwal_sesi: 185,
     psikolog_bertugas: 175,
     status_peserta: 155,
+    status_feedback: 135,
     harapan_sesi: 180,
     created_at: 135
   }
@@ -83,6 +87,7 @@ export default function TktSpreadsheetView({
     "jadwal_sesi",
     "psikolog_bertugas",
     "status_peserta",
+    "status_feedback",
     "harapan_sesi",
     "created_at"
   ]
@@ -100,6 +105,7 @@ export default function TktSpreadsheetView({
     jadwal_sesi: "Sesi Waktu",
     psikolog_bertugas: "Psikolog Bertugas",
     status_peserta: "Status Peserta",
+    status_feedback: "Feedback",
     harapan_sesi: "Fokus Sesi",
     created_at: "Waktu Daftar"
   }
@@ -113,6 +119,7 @@ export default function TktSpreadsheetView({
           ...DEFAULT_COLUMN_WIDTHS,
           ...parsed,
           aksi: Math.max(parsed.aksi || 155, 155),
+          status_feedback: Math.max(parsed.status_feedback || 135, 135),
           jadwal_sesi: Math.max(parsed.jadwal_sesi || 185, 185)
         }
       }
@@ -128,6 +135,14 @@ export default function TktSpreadsheetView({
         if (Array.isArray(parsed) && parsed.length > 0) {
           const validSet = new Set(DEFAULT_COLUMN_ORDER)
           const filtered = parsed.filter((k) => validSet.has(k))
+          if (!filtered.includes("status_feedback")) {
+            const statusIdx = filtered.indexOf("status_peserta")
+            if (statusIdx !== -1) {
+              filtered.splice(statusIdx + 1, 0, "status_feedback")
+            } else {
+              filtered.push("status_feedback")
+            }
+          }
           const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k))
           return [...filtered, ...missing]
         }
@@ -245,6 +260,7 @@ export default function TktSpreadsheetView({
   const [statusFilter, setStatusFilter] = useState("ALL")
   const [dateFilter, setDateFilter] = useState("ALL")
   const [sesiFilter, setSesiFilter] = useState("ALL")
+  const [feedbackFilter, setFeedbackFilter] = useState("ALL")
   const [sortField, setSortField] = useState("created_at")
   const [sortDirection, setSortDirection] = useState("desc")
   const [isExporting, setIsExporting] = useState(false)
@@ -316,10 +332,14 @@ export default function TktSpreadsheetView({
       const matchStatus = statusFilter === "ALL" || p.status_peserta === statusFilter
       const matchDate = dateFilter === "ALL" || p.jadwal_hari === dateFilter
       const matchSesi = sesiFilter === "ALL" || p.jadwal_sesi === sesiFilter
+      const matchFeedback =
+        feedbackFilter === "ALL" ||
+        (feedbackFilter === "SUDAH" && p.has_feedback) ||
+        (feedbackFilter === "BELUM" && !p.has_feedback)
 
-      return matchSearch && matchStatus && matchDate && matchSesi
+      return matchSearch && matchStatus && matchDate && matchSesi && matchFeedback
     })
-  }, [participants, searchQuery, statusFilter, dateFilter, sesiFilter])
+  }, [participants, searchQuery, statusFilter, dateFilter, sesiFilter, feedbackFilter])
 
   const sortedData = useMemo(() => {
     return [...filteredData].sort((a, b) => {
@@ -342,11 +362,18 @@ export default function TktSpreadsheetView({
       HADIR: 0,
       SELESAI_FULL: 0,
       WAITING_LIST: 0,
-      BATAL: 0
+      BATAL: 0,
+      FEEDBACK_SUDAH: 0,
+      FEEDBACK_BELUM: 0
     }
     for (const p of filteredData) {
       if (counts[p.status_peserta] !== undefined) {
         counts[p.status_peserta]++
+      }
+      if (p.has_feedback) {
+        counts.FEEDBACK_SUDAH++
+      } else {
+        counts.FEEDBACK_BELUM++
       }
     }
     return counts
@@ -365,7 +392,8 @@ export default function TktSpreadsheetView({
     searchQuery.trim() ||
     statusFilter !== "ALL" ||
     dateFilter !== "ALL" ||
-    sesiFilter !== "ALL"
+    sesiFilter !== "ALL" ||
+    feedbackFilter !== "ALL"
   )
 
   const [selectionStart, setSelectionStart] = useState(null)
@@ -444,6 +472,10 @@ export default function TktSpreadsheetView({
           p.status_peserta ||
           ""
         )
+      case "status_feedback":
+        return p.has_feedback
+          ? (p.feedback_rating ? `Sudah Isi (★${p.feedback_rating})` : "Sudah Isi")
+          : "Belum Isi"
       case "harapan_sesi":
         return p.harapan_sesi || ""
       case "created_at":
@@ -632,6 +664,7 @@ export default function TktSpreadsheetView({
     setStatusFilter("ALL")
     setDateFilter("ALL")
     setSesiFilter("ALL")
+    setFeedbackFilter("ALL")
     clearBlockSelection()
   }
 
@@ -829,6 +862,7 @@ export default function TktSpreadsheetView({
         "Sesi Konseling",
         "Psikolog Bertugas",
         "Status Peserta",
+        "Status Feedback",
         "Fokus Sesi",
         "Waktu Mendaftar"
       ]
@@ -868,6 +902,7 @@ export default function TktSpreadsheetView({
         p.jadwal_sesi ? formatSesiCompact(p.jadwal_sesi) : "-",
         p.psikolog_bertugas || "Belum Ditentukan",
         statusMap[p.status_peserta] || p.status_peserta || "-",
+        p.has_feedback ? (p.feedback_rating ? `Sudah Isi (★${p.feedback_rating})` : "Sudah Isi") : "Belum Isi",
         p.harapan_sesi || "-",
         formatDateTime(p.created_at)
       ])
@@ -1217,6 +1252,19 @@ export default function TktSpreadsheetView({
             </select>
           </td>
         )
+      case "status_feedback":
+        return (
+          <td
+            key={colKey}
+            style={{ width: w, minWidth: w }}
+            className="py-2 px-3 text-center border-r border-b border-white/10"
+          >
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold py-1 px-2.5 rounded-full bg-slate-800/80 text-slate-400 border border-white/10">
+              <Clock className="w-3 h-3" />
+              <span>Belum Isi</span>
+            </span>
+          </td>
+        )
       case "harapan_sesi":
         return (
           <td
@@ -1520,6 +1568,33 @@ export default function TktSpreadsheetView({
             </select>
           </td>
         )
+      case "status_feedback": {
+        const hasFb = Boolean(editFormData.has_feedback)
+        return (
+          <td
+            key={colKey}
+            style={{ width: w, minWidth: w }}
+            className="py-2 px-3 text-center border-r border-b border-white/10"
+          >
+            {hasFb ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold py-1 px-2.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/30">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                <span>Sudah Isi</span>
+                {editFormData.feedback_rating && (
+                  <span className="ml-0.5 inline-flex items-center text-amber-300 text-[10px]">
+                    ★{editFormData.feedback_rating}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold py-1 px-2.5 rounded-full bg-slate-800/80 text-slate-400 border border-white/10">
+                <Clock className="w-3 h-3" />
+                <span>Belum Isi</span>
+              </span>
+            )}
+          </td>
+        )
+      }
       case "harapan_sesi": {
         const currentHarapan = editFormData.harapan_sesi || "Konsultasi Karier"
         const harapanOptions = STANDARD_HARAPAN_OPTIONS.includes(currentHarapan)
@@ -1763,6 +1838,32 @@ export default function TktSpreadsheetView({
             </span>
           </td>
         )
+      case "status_feedback":
+        return (
+          <td
+            key={colKey}
+            {...commonProps}
+            className={`py-2.5 px-3 text-center border-r border-b border-white/10 select-none cursor-cell transition-colors ${selectionBgClass}`}
+          >
+            {p.has_feedback ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold py-1 px-2.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/40 shadow-sm whitespace-nowrap">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300 stroke-[2.5]" />
+                <span>Sudah Isi</span>
+                {p.feedback_rating && (
+                  <span className="inline-flex items-center gap-0.5 px-1 py-0.2 text-[10px] rounded bg-amber-400/20 text-amber-300 border border-amber-300/30 font-bold ml-0.5">
+                    <Star className="w-2.5 h-2.5 fill-amber-300 text-amber-300" />
+                    <span>{p.feedback_rating}</span>
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium py-1 px-2.5 rounded-full bg-slate-800/70 text-slate-400 border border-white/10 shadow-sm whitespace-nowrap">
+                <Clock className="w-3 h-3 text-slate-400" />
+                <span>Belum Isi</span>
+              </span>
+            )}
+          </td>
+        )
       case "harapan_sesi":
         return (
           <td
@@ -1822,7 +1923,7 @@ export default function TktSpreadsheetView({
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 flex-1 sm:flex-initial">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 flex-1 sm:flex-initial">
               <div className="relative min-w-[130px]">
                 <select
                   value={statusFilter}
@@ -1900,6 +2001,29 @@ export default function TktSpreadsheetView({
                       {s.compactLabel}
                     </option>
                   ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
+              </div>
+
+              <div className="relative min-w-[130px]">
+                <select
+                  value={feedbackFilter}
+                  onChange={(e) => setFeedbackFilter(e.target.value)}
+                  className={`w-full appearance-none pl-3 pr-8 py-2 text-xs rounded-xl liquid-neumorph-inset font-semibold focus:outline-none cursor-pointer transition-all ${
+                    feedbackFilter !== "ALL"
+                      ? "border border-brand-gold/50 text-brand-gold bg-[rgba(8,18,28,0.85)] shadow-sm"
+                      : "border border-white/10 text-slate-200 bg-[rgba(8,18,28,0.65)]"
+                  }`}
+                >
+                  <option value="ALL" className="bg-[#0b1a27] text-slate-200">
+                    Semua Feedback ({participants.length})
+                  </option>
+                  <option value="SUDAH" className="bg-[#0b1a27] text-slate-200">
+                    Sudah Isi ({statusSummary.FEEDBACK_SUDAH})
+                  </option>
+                  <option value="BELUM" className="bg-[#0b1a27] text-slate-200">
+                    Belum Isi ({statusSummary.FEEDBACK_BELUM})
+                  </option>
                 </select>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2" />
               </div>
@@ -2241,6 +2365,9 @@ export default function TktSpreadsheetView({
                   WL: {statusSummary.WAITING_LIST}
                 </span>
               )}
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-400/20 font-semibold">
+                Feedback: {statusSummary.FEEDBACK_SUDAH}/{participants.length}
+              </span>
             </div>
           </div>
 

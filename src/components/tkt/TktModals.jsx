@@ -18,7 +18,8 @@ import {
   ChevronDown,
   Loader2,
   Copy,
-  Check
+  Check,
+  Star
 } from "lucide-react"
 import WhatsAppIcon from "../common/WhatsAppIcon"
 import { validateFullName, validateWhatsApp, validateEmail, validateAngkatan, sanitizeWhatsAppInput, formatWhatsAppDisplay } from "../../utils/validationUtils"
@@ -131,6 +132,22 @@ export function TktDetailModal({ isOpen, onClose, participant, getWaLink, onEdit
               >
                 {statusBadge.label}
               </span>
+              {participant.has_feedback ? (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-400/35 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3 text-emerald-300 stroke-[2.5]" />
+                  <span>Sudah Isi Feedback</span>
+                  {participant.feedback_rating && (
+                    <span className="text-amber-300 ml-0.5 font-bold">
+                      ★{participant.feedback_rating}
+                    </span>
+                  )}
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800/80 text-slate-400 border border-white/10 flex items-center gap-1">
+                  <Clock className="w-3 h-3 text-slate-400" />
+                  <span>Belum Isi Feedback</span>
+                </span>
+              )}
               {participant.is_member_itbcc && (
                 <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-400/10 text-amber-300 border border-amber-400/30 flex items-center gap-1">
                   <Sparkles className="w-3 h-3 text-brand-gold" />
@@ -240,6 +257,81 @@ export function TktDetailModal({ isOpen, onClose, participant, getWaLink, onEdit
               </div>
             )}
           </div>
+
+          {participant.has_feedback ? (
+            <div className="p-4 rounded-2xl liquid-neumorph-inset border border-emerald-400/25 bg-emerald-500/[0.04] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 stroke-[2.5]" />
+                  <span>Evaluasi & Feedback Layanan</span>
+                </div>
+                {participant.feedback_rating && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-400/20 text-amber-300 border border-amber-400/35 text-xs font-bold shadow-sm">
+                    <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                    <span>Kepuasan: {participant.feedback_rating}/5</span>
+                  </span>
+                )}
+              </div>
+
+              {participant.feedback_data && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 pt-1">
+                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Fasilitator</span>
+                    <span className="text-amber-300 font-bold text-xs flex items-center gap-1">
+                      <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                      <span>{participant.feedback_data.rating_fasilitator || "-"}/5</span>
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Materi / Bahasan</span>
+                    <span className="text-amber-300 font-bold text-xs flex items-center gap-1">
+                      <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                      <span>{participant.feedback_data.rating_materi || "-"}/5</span>
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Pemahaman Karier</span>
+                    <span className="text-amber-300 font-bold text-xs flex items-center gap-1">
+                      <Star className="w-3 h-3 fill-amber-300 text-amber-300" />
+                      <span>{participant.feedback_data.rating_pemahaman_karir || "-"}/5</span>
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5 space-y-0.5">
+                    <span className="text-[10px] text-slate-400 block uppercase tracking-wider">Rencana Ikut Lagi</span>
+                    <span className="text-white font-bold text-xs">
+                      {participant.feedback_data.rencana_ikut_lagi || "-"}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {participant.feedback_data?.saran_feedback && (
+                <div className="pt-2 border-t border-white/5">
+                  <span className="text-[10px] text-slate-400 block mb-1">Kesan & Saran Peserta:</span>
+                  <p className="p-3 rounded-xl bg-white/[0.03] border border-white/5 text-slate-200 italic leading-relaxed text-xs">
+                    "{participant.feedback_data.saran_feedback}"
+                  </p>
+                </div>
+              )}
+
+              {participant.feedback_at && (
+                <div className="text-[10px] text-slate-400 flex items-center justify-end gap-1 pt-0.5">
+                  <Clock className="w-3 h-3 text-slate-500" />
+                  <span>Diisi pada: {new Date(participant.feedback_at).toLocaleString("id-ID", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })} WIB</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="p-3.5 rounded-2xl liquid-neumorph-inset border border-white/5 flex items-center justify-between text-xs text-slate-400">
+              <span className="flex items-center gap-1.5 text-slate-400">
+                <Clock className="w-3.5 h-3.5 text-slate-500" />
+                <span>Peserta belum mengisi formulir evaluasi / feedback layanan konseling.</span>
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-white/10 text-[10px] font-semibold">
+                Belum Ada Data
+              </span>
+            </div>
+          )}
 
           <div className="p-3.5 rounded-2xl liquid-neumorph-inset border border-white/5 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
             <span>Waktu Mendaftar: <strong className="text-slate-200">{formattedDate}</strong></span>

@@ -29,7 +29,10 @@ import {
   subscribePesertaRealtime,
   getActiveEventDates,
   getAllActivePsikologs,
-  deletePeserta
+  deletePeserta,
+  getSemuaFeedback,
+  subscribeFeedbackRealtime,
+  normalizeWhatsAppNumber
 } from "../../services/tktService"
 import {
   verifyAdminSession,
@@ -78,8 +81,43 @@ export default function TktAdminDashboard() {
   const loadAllData = useCallback(async (isSilent = false) => {
     if (!isSilent) setRefreshing(true)
     try {
-      const [pts, cfg] = await Promise.all([getSemuaPeserta(), getSystemConfig()])
-      setParticipants(pts || [])
+      const [pts, cfg, fbs] = await Promise.all([
+        getSemuaPeserta(),
+        getSystemConfig(),
+        getSemuaFeedback()
+      ])
+
+      const feedbackByPesertaId = new Map()
+      const feedbackByWa = new Map()
+      const feedbackByEmail = new Map()
+
+      ;(fbs || []).forEach((fb) => {
+        if (fb.peserta_id) feedbackByPesertaId.set(fb.peserta_id, fb)
+        const normWa = normalizeWhatsAppNumber(fb.nomor_wa_pengisi || "")
+        if (normWa) feedbackByWa.set(normWa, fb)
+        const normEmail = String(fb.email_pengisi || "").trim().toLowerCase()
+        if (normEmail) feedbackByEmail.set(normEmail, fb)
+      })
+
+      const enrichedPts = (pts || []).map((p) => {
+        const normWa = normalizeWhatsAppNumber(p.nomor_wa || "")
+        const normEmail = String(p.email || "").trim().toLowerCase()
+        const fb =
+          feedbackByPesertaId.get(p.id) ||
+          (normWa ? feedbackByWa.get(normWa) : null) ||
+          (normEmail ? feedbackByEmail.get(normEmail) : null) ||
+          null
+
+        return {
+          ...p,
+          has_feedback: Boolean(fb),
+          feedback_data: fb,
+          feedback_rating: fb ? fb.rating_kepuasan : null,
+          feedback_at: fb ? fb.created_at : null
+        }
+      })
+
+      setParticipants(enrichedPts)
       if (cfg) {
         setConfig(cfg)
         const dates = getActiveEventDates(cfg)
@@ -102,7 +140,10 @@ export default function TktAdminDashboard() {
   useEffect(() => {
     loadAllData()
 
-    const unsub = subscribePesertaRealtime(() => {
+    const unsubPeserta = subscribePesertaRealtime(() => {
+      loadAllData(true)
+    })
+    const unsubFeedback = subscribeFeedbackRealtime(() => {
       loadAllData(true)
     })
 
@@ -118,7 +159,8 @@ export default function TktAdminDashboard() {
     window.addEventListener("scroll", handleScroll, { passive: true })
 
     return () => {
-      if (unsub) unsub()
+      if (unsubPeserta) unsubPeserta()
+      if (unsubFeedback) unsubFeedback()
       window.removeEventListener("resize", handleResize)
       window.removeEventListener("scroll", handleScroll)
     }

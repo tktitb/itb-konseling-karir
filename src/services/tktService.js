@@ -1017,3 +1017,19 @@ export function subscribeToPesertaChanges(callback) {
 
 export const subscribePesertaRealtime = subscribeToPesertaChanges
 
+export function subscribeFeedbackRealtime(callback) {
+  const channel = supabase.channel("feedback_changes_tkt")
+  channel
+    .on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "peserta_feedback" },
+      () => {
+        callback()
+      }
+    )
+    .subscribe()
+  return () => {
+    supabase.removeChannel(channel)
+  }
+}
+
