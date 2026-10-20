@@ -323,6 +323,16 @@ export async function toggleRegistrationStatus(status) {
   return await updateSystemConfig("status_pendaftaran", status)
 }
 
+export async function saveSpreadsheetColumnOrder(columnOrder) {
+  if (!Array.isArray(columnOrder) || columnOrder.length === 0) return false
+  return await updateSystemConfig("spreadsheet_column_order", JSON.stringify(columnOrder))
+}
+
+export async function saveSpreadsheetColumnWidths(columnWidths) {
+  if (!columnWidths || typeof columnWidths !== "object") return false
+  return await updateSystemConfig("spreadsheet_column_widths", JSON.stringify(columnWidths))
+}
+
 export async function getSemuaPeserta() {
   try {
     const { data, error } = await supabase

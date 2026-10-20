@@ -36,9 +36,144 @@ import {
   formatSesiCompact,
   ENABLE_TKT_WAITING_LIST,
   getDefaultWaTemplateKey,
-  checkWhatsAppRegistered
+  checkWhatsAppRegistered,
+  saveSpreadsheetColumnOrder,
+  saveSpreadsheetColumnWidths
 } from "../../../services/tktService"
 import { TktDeleteModal } from "../TktModals"
+
+const DEFAULT_COLUMN_WIDTHS = {
+  aksi: 155,
+  no: 55,
+  nama_lengkap: 200,
+  nomor_wa: 155,
+  email: 185,
+  asal_univ: 180,
+  jurusan: 165,
+  angkatan: 95,
+  is_member_itbcc: 115,
+  jadwal_hari: 140,
+  jadwal_sesi: 185,
+  psikolog_bertugas: 175,
+  status_peserta: 155,
+  status_feedback: 135,
+  harapan_sesi: 180,
+  created_at: 135
+}
+
+const DEFAULT_COLUMN_ORDER = [
+  "no",
+  "nama_lengkap",
+  "nomor_wa",
+  "email",
+  "asal_univ",
+  "jurusan",
+  "angkatan",
+  "is_member_itbcc",
+  "jadwal_hari",
+  "jadwal_sesi",
+  "psikolog_bertugas",
+  "status_peserta",
+  "status_feedback",
+  "harapan_sesi",
+  "created_at"
+]
+
+const COLUMN_LABELS = {
+  no: "No",
+  nama_lengkap: "Nama Lengkap",
+  nomor_wa: "Nomor WhatsApp",
+  email: "Email Peserta",
+  asal_univ: "Asal Universitas",
+  jurusan: "Program Studi",
+  angkatan: "Angkatan",
+  is_member_itbcc: "Member ITB CC",
+  jadwal_hari: "Hari Kegiatan",
+  jadwal_sesi: "Sesi Waktu",
+  psikolog_bertugas: "Psikolog Bertugas",
+  status_peserta: "Status Peserta",
+  status_feedback: "Feedback",
+  harapan_sesi: "Fokus Sesi",
+  created_at: "Waktu Daftar"
+}
+
+function resolveInitialColumnWidths(config) {
+  if (config?.spreadsheet_column_widths) {
+    try {
+      const parsed = typeof config.spreadsheet_column_widths === "string"
+        ? JSON.parse(config.spreadsheet_column_widths)
+        : config.spreadsheet_column_widths
+      if (parsed && typeof parsed === "object") {
+        return {
+          ...DEFAULT_COLUMN_WIDTHS,
+          ...parsed,
+          aksi: Math.max(parsed.aksi || 155, 155),
+          status_feedback: Math.max(parsed.status_feedback || 135, 135),
+          jadwal_sesi: Math.max(parsed.jadwal_sesi || 185, 185)
+        }
+      }
+    } catch {}
+  }
+  try {
+    const saved = localStorage.getItem("tkt_spreadsheet_column_widths")
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      return {
+        ...DEFAULT_COLUMN_WIDTHS,
+        ...parsed,
+        aksi: Math.max(parsed.aksi || 155, 155),
+        status_feedback: Math.max(parsed.status_feedback || 135, 135),
+        jadwal_sesi: Math.max(parsed.jadwal_sesi || 185, 185)
+      }
+    }
+  } catch {}
+  return DEFAULT_COLUMN_WIDTHS
+}
+
+function resolveInitialColumnOrder(config) {
+  if (config?.spreadsheet_column_order) {
+    try {
+      const parsed = typeof config.spreadsheet_column_order === "string"
+        ? JSON.parse(config.spreadsheet_column_order)
+        : config.spreadsheet_column_order
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const validSet = new Set(DEFAULT_COLUMN_ORDER)
+        const filtered = parsed.filter((k) => validSet.has(k))
+        if (!filtered.includes("status_feedback")) {
+          const statusIdx = filtered.indexOf("status_peserta")
+          if (statusIdx !== -1) {
+            filtered.splice(statusIdx + 1, 0, "status_feedback")
+          } else {
+            filtered.push("status_feedback")
+          }
+        }
+        const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k))
+        return [...filtered, ...missing]
+      }
+    } catch {}
+  }
+  try {
+    const saved = localStorage.getItem("tkt_spreadsheet_column_order")
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const validSet = new Set(DEFAULT_COLUMN_ORDER)
+        const filtered = parsed.filter((k) => validSet.has(k))
+        if (!filtered.includes("status_feedback")) {
+          const statusIdx = filtered.indexOf("status_peserta")
+          if (statusIdx !== -1) {
+            filtered.splice(statusIdx + 1, 0, "status_feedback")
+          } else {
+            filtered.push("status_feedback")
+          }
+        }
+        const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k))
+        return [...filtered, ...missing]
+      }
+    }
+  } catch {}
+  return DEFAULT_COLUMN_ORDER
+}
 
 export default function TktSpreadsheetView({
   participants = [],
@@ -55,101 +190,57 @@ export default function TktSpreadsheetView({
   onOpenWhatsApp,
   onDeleteParticipant
 }) {
-  const DEFAULT_COLUMN_WIDTHS = {
-    aksi: 155,
-    no: 55,
-    nama_lengkap: 200,
-    nomor_wa: 155,
-    email: 185,
-    asal_univ: 180,
-    jurusan: 165,
-    angkatan: 95,
-    is_member_itbcc: 115,
-    jadwal_hari: 140,
-    jadwal_sesi: 185,
-    psikolog_bertugas: 175,
-    status_peserta: 155,
-    status_feedback: 135,
-    harapan_sesi: 180,
-    created_at: 135
-  }
+  const [columnWidths, setColumnWidths] = useState(() => resolveInitialColumnWidths(config))
+  const [columnOrder, setColumnOrder] = useState(() => resolveInitialColumnOrder(config))
 
-  const DEFAULT_COLUMN_ORDER = [
-    "no",
-    "nama_lengkap",
-    "nomor_wa",
-    "email",
-    "asal_univ",
-    "jurusan",
-    "angkatan",
-    "is_member_itbcc",
-    "jadwal_hari",
-    "jadwal_sesi",
-    "psikolog_bertugas",
-    "status_peserta",
-    "status_feedback",
-    "harapan_sesi",
-    "created_at"
-  ]
-
-  const COLUMN_LABELS = {
-    no: "No",
-    nama_lengkap: "Nama Lengkap",
-    nomor_wa: "Nomor WhatsApp",
-    email: "Email Peserta",
-    asal_univ: "Asal Universitas",
-    jurusan: "Program Studi",
-    angkatan: "Angkatan",
-    is_member_itbcc: "Member ITB CC",
-    jadwal_hari: "Hari Kegiatan",
-    jadwal_sesi: "Sesi Waktu",
-    psikolog_bertugas: "Psikolog Bertugas",
-    status_peserta: "Status Peserta",
-    status_feedback: "Feedback",
-    harapan_sesi: "Fokus Sesi",
-    created_at: "Waktu Daftar"
-  }
-
-  const [columnWidths, setColumnWidths] = useState(() => {
+  useEffect(() => {
+    if (!config?.spreadsheet_column_widths) return
     try {
-      const saved = localStorage.getItem("tkt_spreadsheet_column_widths")
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        return {
+      const parsed = typeof config.spreadsheet_column_widths === "string"
+        ? JSON.parse(config.spreadsheet_column_widths)
+        : config.spreadsheet_column_widths
+      if (parsed && typeof parsed === "object") {
+        setColumnWidths((prev) => ({
           ...DEFAULT_COLUMN_WIDTHS,
+          ...prev,
           ...parsed,
-          aksi: Math.max(parsed.aksi || 155, 155),
-          status_feedback: Math.max(parsed.status_feedback || 135, 135),
-          jadwal_sesi: Math.max(parsed.jadwal_sesi || 185, 185)
-        }
+          aksi: Math.max(parsed.aksi || prev.aksi || 155, 155),
+          status_feedback: Math.max(parsed.status_feedback || prev.status_feedback || 135, 135),
+          jadwal_sesi: Math.max(parsed.jadwal_sesi || prev.jadwal_sesi || 185, 185)
+        }))
+        try {
+          localStorage.setItem("tkt_spreadsheet_column_widths", JSON.stringify(parsed))
+        } catch {}
       }
     } catch {}
-    return DEFAULT_COLUMN_WIDTHS
-  })
+  }, [config?.spreadsheet_column_widths])
 
-  const [columnOrder, setColumnOrder] = useState(() => {
+  useEffect(() => {
+    if (!config?.spreadsheet_column_order) return
     try {
-      const saved = localStorage.getItem("tkt_spreadsheet_column_order")
-      if (saved) {
-        const parsed = JSON.parse(saved)
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const validSet = new Set(DEFAULT_COLUMN_ORDER)
-          const filtered = parsed.filter((k) => validSet.has(k))
-          if (!filtered.includes("status_feedback")) {
-            const statusIdx = filtered.indexOf("status_peserta")
-            if (statusIdx !== -1) {
-              filtered.splice(statusIdx + 1, 0, "status_feedback")
-            } else {
-              filtered.push("status_feedback")
-            }
+      const parsed = typeof config.spreadsheet_column_order === "string"
+        ? JSON.parse(config.spreadsheet_column_order)
+        : config.spreadsheet_column_order
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const validSet = new Set(DEFAULT_COLUMN_ORDER)
+        const filtered = parsed.filter((k) => validSet.has(k))
+        if (!filtered.includes("status_feedback")) {
+          const statusIdx = filtered.indexOf("status_peserta")
+          if (statusIdx !== -1) {
+            filtered.splice(statusIdx + 1, 0, "status_feedback")
+          } else {
+            filtered.push("status_feedback")
           }
-          const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k))
-          return [...filtered, ...missing]
         }
+        const missing = DEFAULT_COLUMN_ORDER.filter((k) => !filtered.includes(k))
+        const fullOrder = [...filtered, ...missing]
+        setColumnOrder(fullOrder)
+        try {
+          localStorage.setItem("tkt_spreadsheet_column_order", JSON.stringify(fullOrder))
+        } catch {}
       }
     } catch {}
-    return DEFAULT_COLUMN_ORDER
-  })
+  }, [config?.spreadsheet_column_order])
 
   const [draggedCol, setDraggedCol] = useState(null)
   const [dragOverCol, setDragOverCol] = useState(null)
@@ -164,6 +255,7 @@ export default function TktSpreadsheetView({
     resizingColRef.current = colKey
     startXRef.current = e.clientX
     startWidthRef.current = columnWidths[colKey] || DEFAULT_COLUMN_WIDTHS[colKey] || 120
+    let lastWidths = null
 
     const handleMouseMove = (moveEvent) => {
       if (!resizingColRef.current) return
@@ -171,6 +263,7 @@ export default function TktSpreadsheetView({
       const newWidth = Math.max(55, startWidthRef.current + deltaX)
       setColumnWidths((prev) => {
         const updated = { ...prev, [resizingColRef.current]: newWidth }
+        lastWidths = updated
         try {
           localStorage.setItem("tkt_spreadsheet_column_widths", JSON.stringify(updated))
         } catch {}
@@ -184,6 +277,9 @@ export default function TktSpreadsheetView({
       window.removeEventListener("mouseup", handleMouseUp)
       document.body.style.cursor = ""
       document.body.style.userSelect = ""
+      if (lastWidths) {
+        saveSpreadsheetColumnWidths(lastWidths)
+      }
     }
 
     document.body.style.cursor = "col-resize"
@@ -200,6 +296,7 @@ export default function TktSpreadsheetView({
       try {
         localStorage.setItem("tkt_spreadsheet_column_widths", JSON.stringify(updated))
       } catch {}
+      saveSpreadsheetColumnWidths(updated)
       return updated
     })
   }
@@ -243,6 +340,7 @@ export default function TktSpreadsheetView({
       try {
         localStorage.setItem("tkt_spreadsheet_column_order", JSON.stringify(newOrder))
       } catch {}
+      saveSpreadsheetColumnOrder(newOrder)
     }
 
     setDraggedCol(null)
@@ -254,6 +352,7 @@ export default function TktSpreadsheetView({
     try {
       localStorage.removeItem("tkt_spreadsheet_column_order")
     } catch {}
+    saveSpreadsheetColumnOrder(DEFAULT_COLUMN_ORDER)
   }
 
   const [searchQuery, setSearchQuery] = useState("")
