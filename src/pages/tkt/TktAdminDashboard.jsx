@@ -31,8 +31,7 @@ import {
   getAllActivePsikologs,
   deletePeserta,
   getSemuaFeedback,
-  subscribeFeedbackRealtime,
-  normalizeWhatsAppNumber
+  subscribeFeedbackRealtime
 } from "../../services/tktService"
 import {
   verifyAdminSession,
@@ -88,25 +87,13 @@ export default function TktAdminDashboard() {
       ])
 
       const feedbackByPesertaId = new Map()
-      const feedbackByWa = new Map()
-      const feedbackByEmail = new Map()
 
       ;(fbs || []).forEach((fb) => {
         if (fb.peserta_id) feedbackByPesertaId.set(fb.peserta_id, fb)
-        const normWa = normalizeWhatsAppNumber(fb.nomor_wa_pengisi || "")
-        if (normWa) feedbackByWa.set(normWa, fb)
-        const normEmail = String(fb.email_pengisi || "").trim().toLowerCase()
-        if (normEmail) feedbackByEmail.set(normEmail, fb)
       })
 
       const enrichedPts = (pts || []).map((p) => {
-        const normWa = normalizeWhatsAppNumber(p.nomor_wa || "")
-        const normEmail = String(p.email || "").trim().toLowerCase()
-        const fb =
-          feedbackByPesertaId.get(p.id) ||
-          (normWa ? feedbackByWa.get(normWa) : null) ||
-          (normEmail ? feedbackByEmail.get(normEmail) : null) ||
-          null
+        const fb = feedbackByPesertaId.get(p.id) || null
 
         return {
           ...p,
