@@ -351,7 +351,7 @@ export default function TktConfirmAttendancePage() {
                   <MapPin className="w-3.5 h-3.5 text-brand-gold" />
                   <span>Lokasi Konseling</span>
                 </div>
-                <p className="text-xs sm:text-sm font-semibold text-white">Aula Timur ITB</p>
+                <p className="text-xs sm:text-sm font-semibold text-white">Campus Center Timur ITB Lantai Dasar</p>
               </div>
             </div>
 
@@ -373,7 +373,7 @@ export default function TktConfirmAttendancePage() {
               <p className="font-semibold text-brand-gold">Informasi Kehadiran di Lokasi:</p>
               <p className="text-slate-300">
                 Mohon hadir <strong>10–15 menit sebelum sesi dimulai</strong> di{" "}
-                <strong>Aula Timur ITB</strong> untuk melakukan registrasi ulang. Bagi peserta yang
+                <strong>Campus Center Timur ITB Lantai Dasar</strong> untuk melakukan registrasi ulang. Bagi peserta yang
                 ingin membawa CV (soft file maupun hardcopy) sangat diperbolehkan.
               </p>
             </div>
